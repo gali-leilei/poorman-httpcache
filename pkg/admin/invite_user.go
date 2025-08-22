@@ -56,13 +56,17 @@ func NewAdminService(db *pgx.Conn) *AdminService {
 	}
 }
 
+// ServiceKeyPrefix is the prefix for service keys
+// format {prefix}{random_string}
+const ServiceKeyPrefix = "svc-miro-api01-"
+
 // generateAPIKey creates a secure random API key string
 func generateAPIKey() (string, error) {
 	bytes := make([]byte, 32) // 64 character hex string
 	if _, err := rand.Read(bytes); err != nil {
 		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
-	return "pmhc_" + hex.EncodeToString(bytes), nil
+	return ServiceKeyPrefix + hex.EncodeToString(bytes), nil
 }
 
 // InviteNewUser assigns an API key to a new user and sets up initial quotas for all services.
