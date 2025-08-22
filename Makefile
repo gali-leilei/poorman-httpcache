@@ -15,5 +15,8 @@ dev: build
 deploy: build
 	nohup ./httpcache > trace.log 2>&1 & echo $$! > save_pid.txt
 
+sqlc:
+	cd pkg/dbsqlc && sqlc generate
+
 kill:
 	kill -9 $$(cat save_pid.txt) && rm save_pid.txt

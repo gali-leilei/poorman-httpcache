@@ -3,7 +3,8 @@ package tollgate
 
 import (
 	"context"
-	"database/sql"
+
+	"httpcache/pkg/dbsqlc"
 )
 
 type Adapter interface {
@@ -13,19 +14,29 @@ type Adapter interface {
 }
 
 type PostgresAdapter struct {
-	db *sql.DB
+	queries *dbsqlc.Queries
 }
 
-func NewPostgresAdapter(db *sql.DB) Adapter {
-	return &PostgresAdapter{db: db}
+func NewPostgresAdapter(db dbsqlc.DBTX) Adapter {
+	return &PostgresAdapter{
+		queries: dbsqlc.New(db),
+	}
 }
 
 func (a *PostgresAdapter) Consume(ctx context.Context, ticket string) (int, error) {
-	return 0, nil
+	balance, err := a.queries.ConsumeQuotaByKeyString(ctx, ticket)
+	if err != nil {
+		return 0, err
+	}
+	return int(balance), nil
 }
 
 func (a *PostgresAdapter) Balance(ctx context.Context, ticket string) (int, error) {
-	return 0, nil
+	balance, err := a.queries.GetBalanceByKeyString(ctx, ticket)
+	if err != nil {
+		return 0, err
+	}
+	return int(balance), nil
 }
 
 // func (a *PostgresAdapter) Topup(ctx context.Context, ticket string, amount int) error {
