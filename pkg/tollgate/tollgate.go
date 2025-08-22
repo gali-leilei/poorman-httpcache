@@ -7,7 +7,7 @@ type Tollgate struct {
 	adapter    Adapter
 }
 
-func NewTollgate(adapter Adapter, keyFunc func(r *http.Request) string) *Tollgate {
+func New(adapter Adapter, keyFunc func(r *http.Request) string) *Tollgate {
 	return &Tollgate{adapter: adapter, extractKey: keyFunc}
 }
 

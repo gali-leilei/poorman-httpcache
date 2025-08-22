@@ -6,10 +6,12 @@ import (
 	"httpcache/pkg"
 	"httpcache/pkg/cache"
 	"httpcache/pkg/proxy"
+	"httpcache/pkg/tollgate"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +31,8 @@ type Config struct {
 	SerperAPIKey string `env:"SERPER_API_KEY"`
 	// jina
 	JinaAPIKey string `env:"JINA_API_KEY"`
+	// internal use, single key only
+	InternalKey string `env:"INTERNAL_KEY"`
 }
 
 func NewCache(cfg Config, logger *slog.Logger) (*cache.Cache, error) {
@@ -55,7 +59,7 @@ func NewJinaProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.Han
 	rp, err := proxy.New(
 		proxy.WithRewrites(
 			proxy.RewriteJinaPath("https://r.jina.ai"),
-			// proxy.ReplaceJinaKey(cfg.JinaAPIKey),
+			proxy.ReplaceJinaKey(cfg.JinaAPIKey),
 			proxy.DebugRequest(logger),
 		),
 	)
@@ -63,14 +67,20 @@ func NewJinaProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.Han
 		logger.Error("Failed to create Jina proxy", "error", err)
 		return nil, err
 	}
-	return cache.HTTPHandlerMiddleware(rp), nil
+
+	tollgate := tollgate.New(tollgate.NewEnvAdapter(cfg.InternalKey), func(r *http.Request) string {
+		// jina key is Authorization: Bearer <key>
+		return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	})
+
+	return tollgate.HTTPHandlerMiddleware(cache.HTTPHandlerMiddleware(rp)), nil
 }
 
 func NewSerperProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.Handler, error) {
 	rp, err := proxy.New(
 		proxy.WithRewrites(
 			proxy.RewriteSerperPath("https://google.serper.dev"),
-			// proxy.ReplaceSerperKey(cfg.SerperAPIKey),
+			proxy.ReplaceSerperKey(cfg.SerperAPIKey),
 			proxy.DebugRequest(logger),
 		),
 	)
@@ -78,7 +88,12 @@ func NewSerperProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.H
 		logger.Error("Failed to create Serper proxy", "error", err)
 		return nil, err
 	}
-	return cache.HTTPHandlerMiddleware(rp), nil
+	tollgate := tollgate.New(tollgate.NewEnvAdapter(cfg.InternalKey), func(r *http.Request) string {
+		// serper key is X-API-KEY: <key>
+		return r.Header.Get("X-API-KEY")
+	})
+
+	return tollgate.HTTPHandlerMiddleware(cache.HTTPHandlerMiddleware(rp)), nil
 }
 
 func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
