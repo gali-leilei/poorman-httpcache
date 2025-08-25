@@ -63,5 +63,4 @@ type Users struct {
 	ID        int64
 	Email     string
 	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
 }

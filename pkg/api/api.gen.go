@@ -50,7 +50,6 @@ type User struct {
 	CreatedAt time.Time           `json:"created_at"`
 	Email     openapi_types.Email `json:"email"`
 	Id        int64               `json:"id"`
-	UpdatedAt time.Time           `json:"updated_at"`
 }
 
 // PostAdminKeysJSONRequestBody defines body for PostAdminKeys for application/json ContentType.

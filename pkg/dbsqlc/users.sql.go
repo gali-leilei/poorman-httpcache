@@ -13,8 +13,8 @@ const createUser = `-- name: CreateUser :one
 
 INSERT INTO users (email)
 VALUES ($1)
-ON CONFLICT (email) DO UPDATE SET updated_at = NOW()
-RETURNING id, email, created_at, updated_at
+ON CONFLICT (email) DO NOTHING
+RETURNING id, email, created_at
 `
 
 // User-related queries
@@ -22,17 +22,12 @@ RETURNING id, email, created_at, updated_at
 func (q *Queries) CreateUser(ctx context.Context, email string) (*Users, error) {
 	row := q.db.QueryRow(ctx, createUser, email)
 	var i Users
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
+	err := row.Scan(&i.ID, &i.Email, &i.CreatedAt)
 	return &i, err
 }
 
 const getAllUsers = `-- name: GetAllUsers :many
-SELECT id, email, created_at, updated_at FROM users ORDER BY created_at DESC
+SELECT id, email, created_at FROM users ORDER BY created_at DESC
 `
 
 // Get all users
@@ -45,12 +40,7 @@ func (q *Queries) GetAllUsers(ctx context.Context) ([]*Users, error) {
 	var items []*Users
 	for rows.Next() {
 		var i Users
-		if err := rows.Scan(
-			&i.ID,
-			&i.Email,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.Email, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, &i)
@@ -62,18 +52,13 @@ func (q *Queries) GetAllUsers(ctx context.Context) ([]*Users, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, created_at FROM users WHERE email = $1
 `
 
 // Get user by email
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (*Users, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
 	var i Users
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
+	err := row.Scan(&i.ID, &i.Email, &i.CreatedAt)
 	return &i, err
 }

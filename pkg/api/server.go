@@ -66,7 +66,6 @@ func mapDBUserToAPIUser(dbUser *dbsqlc.Users) User {
 		Id:        dbUser.ID,
 		Email:     openapi_types.Email(dbUser.Email),
 		CreatedAt: dbUser.CreatedAt.Time,
-		UpdatedAt: dbUser.UpdatedAt.Time,
 	}
 }
 
@@ -152,7 +151,6 @@ func (s *Server) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
 		Id:        result.User.ID,
 		Email:     openapi_types.Email(result.User.Email),
 		CreatedAt: result.User.CreatedAt,
-		UpdatedAt: result.User.CreatedAt, // Note: admin.User doesn't have UpdatedAt
 	}
 
 	s.writeJSON(w, http.StatusCreated, user)
