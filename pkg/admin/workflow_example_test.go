@@ -22,9 +22,9 @@ func DemoWorkflowInviteAndCheck() {
 	// Create admin service
 	adminService := admin.NewAdminService(conn)
 
-	// Step 1: Invite a new user
+	// Step 1: Invite a new user (normal user key with quotas)
 	log.Println("=== Inviting New User ===")
-	inviteResult, err := adminService.InviteNewUser(ctx, "newuser@example.com")
+	inviteResult, err := adminService.InviteNewUser(ctx, "newuser@example.com", false)
 	if err != nil {
 		log.Fatal("Failed to invite new user:", err)
 	}
@@ -43,7 +43,7 @@ func DemoWorkflowInviteAndCheck() {
 
 	// Step 3: Try to invite the same user again (this should fail)
 	log.Println("\n=== Attempting to Invite Same User Again ===")
-	_, err = adminService.InviteNewUser(ctx, "newuser@example.com")
+	_, err = adminService.InviteNewUser(ctx, "newuser@example.com", false)
 	if err != nil {
 		log.Printf("✅ Expected error: %v", err) // This should fail with "user already exists"
 	} else {
