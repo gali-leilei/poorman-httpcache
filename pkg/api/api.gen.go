@@ -30,9 +30,15 @@ type ApiKey struct {
 
 // CreateApiKeyRequest defines model for CreateApiKeyRequest.
 type CreateApiKeyRequest struct {
-	HasQuota  bool   `json:"has_quota"`
-	KeyString string `json:"key_string"`
-	UserId    int64  `json:"user_id"`
+	Email    openapi_types.Email `json:"email"`
+	HasQuota bool                `json:"has_quota"`
+}
+
+// CreateApiKeyResponse defines model for CreateApiKeyResponse.
+type CreateApiKeyResponse struct {
+	ApiKey        string              `json:"api_key"`
+	ServiceQuotas []ServiceQuota      `json:"service_quotas"`
+	UserEmail     openapi_types.Email `json:"user_email"`
 }
 
 // CreateUserRequest defines model for CreateUserRequest.
@@ -40,9 +46,23 @@ type CreateUserRequest struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	Code   int      `json:"code"`
+	Msg    string   `json:"msg"`
+	Traces []string `json:"traces"`
+}
+
 // Pong defines model for Pong.
 type Pong struct {
 	Ping string `json:"ping"`
+}
+
+// ServiceQuota defines model for ServiceQuota.
+type ServiceQuota struct {
+	InitialQuota   int    `json:"initial_quota"`
+	RemainingQuota int    `json:"remaining_quota"`
+	ServiceName    string `json:"service_name"`
 }
 
 // User defines model for User.

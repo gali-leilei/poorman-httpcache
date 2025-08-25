@@ -31,8 +31,16 @@ paths:
                   $ref: '#/components/schemas/User'
         '401':
           description: Unauthorized - Missing or invalid X-Admin-Key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       summary: Create a new user
       tags:
@@ -54,10 +62,22 @@ paths:
                 $ref: '#/components/schemas/User'
         '400':
           description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized - Missing or invalid X-Admin-Key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /admin/keys:
     get:
@@ -77,8 +97,16 @@ paths:
                   $ref: '#/components/schemas/ApiKey'
         '401':
           description: Unauthorized - Missing or invalid X-Admin-Key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       summary: Create a new API key
       tags:
@@ -97,13 +125,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiKey'
+                $ref: '#/components/schemas/CreateApiKeyResponse'
         '400':
           description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized - Missing or invalid X-Admin-Key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
@@ -123,6 +163,26 @@ components:
         ping:
           type: string
           example: pong
+    
+    # Error response type
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - msg
+        - traces
+      properties:
+        code:
+          type: integer
+          example: 400
+        msg:
+          type: string
+          example: "Bad request"
+        traces:
+          type: array
+          items:
+            type: string
+          example: ["validation failed for field 'email'", "email format is invalid"]
     
     # User schemas
     User:
@@ -196,17 +256,49 @@ components:
     CreateApiKeyRequest:
       type: object
       required:
-        - user_id
-        - key_string
+        - email
         - has_quota
       properties:
-        user_id:
-          type: integer
-          format: int64
-          example: 1
-        key_string:
+        email:
           type: string
-          example: "sk-1234567890abcdef"
+          format: email
+          example: "user@example.com"
         has_quota:
           type: boolean
           example: true
+    
+    CreateApiKeyResponse:
+      type: object
+      required:
+        - api_key
+        - user_email
+        - service_quotas
+      properties:
+        api_key:
+          type: string
+          example: "svc-miro-api01-1234567890abcdef"
+        user_email:
+          type: string
+          format: email
+          example: "user@example.com"
+        service_quotas:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceQuota'
+    
+    ServiceQuota:
+      type: object
+      required:
+        - service_name
+        - initial_quota
+        - remaining_quota
+      properties:
+        service_name:
+          type: string
+          example: "translation"
+        initial_quota:
+          type: integer
+          example: 1000
+        remaining_quota:
+          type: integer
+          example: 1000

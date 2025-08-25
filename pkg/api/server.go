@@ -55,9 +55,27 @@ func (s *Server) writeJSON(w http.ResponseWriter, statusCode int, data interface
 
 // writeError writes error response
 func (s *Server) writeError(w http.ResponseWriter, statusCode int, message string) {
+	s.writeErrorWithTraces(w, statusCode, message, []string{})
+}
+
+// writeErrorWithTraces writes error response with traces
+func (s *Server) writeErrorWithTraces(w http.ResponseWriter, statusCode int, message string, traces []string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+
+	errorResponse := ErrorResponse{
+		Code:   statusCode,
+		Msg:    message,
+		Traces: traces,
+	}
+
+	if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
+		s.logger.Error("Failed to encode error response", "error", err)
+		// Fallback to plain text if JSON encoding fails
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal server error"))
+	}
 }
 
 // mapDBUserToAPIUser converts database user to API user model
@@ -128,13 +146,13 @@ func (s *Server) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var req CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, "Invalid JSON request body")
+		s.writeErrorWithTraces(w, http.StatusBadRequest, "Invalid JSON request body", []string{"failed to parse JSON request body", err.Error()})
 		return
 	}
 
 	// Validate email
 	if req.Email == "" {
-		s.writeError(w, http.StatusBadRequest, "Email is required")
+		s.writeErrorWithTraces(w, http.StatusBadRequest, "Email is required", []string{"validation failed for field 'email'", "email field cannot be empty"})
 		return
 	}
 
@@ -197,48 +215,41 @@ func (s *Server) PostAdminKeys(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var req CreateApiKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, "Invalid JSON request body")
+		s.writeErrorWithTraces(w, http.StatusBadRequest, "Invalid JSON request body", []string{"failed to parse JSON request body", err.Error()})
 		return
 	}
 
 	// Validate required fields
-	if req.UserId == 0 {
-		s.writeError(w, http.StatusBadRequest, "user_id is required")
-		return
-	}
-	if req.KeyString == "" {
-		s.writeError(w, http.StatusBadRequest, "key_string is required")
+	if req.Email == "" {
+		s.writeErrorWithTraces(w, http.StatusBadRequest, "email is required", []string{"validation failed for field 'email'", "email field cannot be empty"})
 		return
 	}
 
-	queries := dbsqlc.New(s.db)
-
-	// Note: We'll let the database foreign key constraint validate the user_id
-	// since we don't have a GetUserByID query available
-
-	// Create the API key directly using the database queries
-	var dbAPIKey *dbsqlc.ApiKeys
-	var err error
-	if req.HasQuota {
-		dbAPIKey, err = queries.CreateUserAPIKey(ctx, &dbsqlc.CreateUserAPIKeyParams{
-			UserID:    req.UserId,
-			KeyString: req.KeyString,
-		})
-	} else {
-		dbAPIKey, err = queries.CreateServiceKey(ctx, &dbsqlc.CreateServiceKeyParams{
-			UserID:    req.UserId,
-			KeyString: req.KeyString,
-		})
-	}
-
+	// Use admin service to invite new user with API key
+	// Pass !req.HasQuota as isServiceKey (service keys don't have quotas)
+	result, err := s.adminService.InviteNewUser(ctx, string(req.Email), !req.HasQuota)
 	if err != nil {
-		s.logger.Error("Failed to create API key", "error", err, "user_id", req.UserId)
+		s.logger.Error("Failed to create API key", "error", err, "email", req.Email)
 		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create API key: %v", err))
 		return
 	}
 
-	// Convert to API model
-	apiKey := mapDBAPIKeyToAPIKey(dbAPIKey)
+	// Convert service quotas to API model
+	var serviceQuotas []ServiceQuota
+	for _, quota := range result.InitialQuotas {
+		serviceQuotas = append(serviceQuotas, ServiceQuota{
+			ServiceName:    quota.ServiceName,
+			InitialQuota:   int(quota.InitialQuota),
+			RemainingQuota: int(quota.RemainingQuota),
+		})
+	}
 
-	s.writeJSON(w, http.StatusCreated, apiKey)
+	// Create response
+	response := CreateApiKeyResponse{
+		ApiKey:        result.APIKey.KeyString,
+		UserEmail:     openapi_types.Email(result.User.Email),
+		ServiceQuotas: serviceQuotas,
+	}
+
+	s.writeJSON(w, http.StatusCreated, response)
 }
