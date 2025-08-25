@@ -76,3 +76,8 @@ ORDER BY created_at DESC;
 SELECT * FROM api_keys 
 WHERE user_id = $1 AND status = 'assigned'
 ORDER BY created_at DESC;
+
+-- Get all API keys
+-- name: GetAllAPIKeys :many
+SELECT * FROM api_keys
+ORDER BY created_at DESC;

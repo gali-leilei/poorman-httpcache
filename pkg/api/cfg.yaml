@@ -3,4 +3,7 @@ package: api
 generate:
   std-http-server: true
   models: true
-output: gen.go
+output: api.gen.go
+
+# Add this to the top of the file
+#go:generate oapi-codegen -config cfg.yaml api.yaml

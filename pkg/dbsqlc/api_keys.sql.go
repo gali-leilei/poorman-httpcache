@@ -172,6 +172,40 @@ func (q *Queries) GetAPIKeysByUserID(ctx context.Context, userID int64) ([]*ApiK
 	return items, nil
 }
 
+const getAllAPIKeys = `-- name: GetAllAPIKeys :many
+SELECT id, user_id, key_string, status, has_quota, created_at, updated_at FROM api_keys
+ORDER BY created_at DESC
+`
+
+// Get all API keys
+func (q *Queries) GetAllAPIKeys(ctx context.Context) ([]*ApiKeys, error) {
+	rows, err := q.db.Query(ctx, getAllAPIKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ApiKeys
+	for rows.Next() {
+		var i ApiKeys
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.KeyString,
+			&i.Status,
+			&i.HasQuota,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAssignedAPIKeysByUserID = `-- name: GetAssignedAPIKeysByUserID :many
 SELECT id, user_id, key_string, status, has_quota, created_at, updated_at FROM api_keys 
 WHERE user_id = $1 AND status = 'assigned'
