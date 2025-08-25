@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	AdminKeyScopes = "AdminKey.Scopes"
+	AdminKeyScopes  = "AdminKey.Scopes"
+	BasicAuthScopes = "BasicAuth.Scopes"
 )
 
 // ApiKey defines model for ApiKey.
@@ -146,6 +147,8 @@ func (siw *ServerInterfaceWrapper) GetAdminKeys(w http.ResponseWriter, r *http.R
 
 	ctx = context.WithValue(ctx, AdminKeyScopes, []string{})
 
+	ctx = context.WithValue(ctx, BasicAuthScopes, []string{})
+
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +168,8 @@ func (siw *ServerInterfaceWrapper) PostAdminKeys(w http.ResponseWriter, r *http.
 	ctx := r.Context()
 
 	ctx = context.WithValue(ctx, AdminKeyScopes, []string{})
+
+	ctx = context.WithValue(ctx, BasicAuthScopes, []string{})
 
 	r = r.WithContext(ctx)
 
@@ -186,6 +191,8 @@ func (siw *ServerInterfaceWrapper) GetAdminUsers(w http.ResponseWriter, r *http.
 
 	ctx = context.WithValue(ctx, AdminKeyScopes, []string{})
 
+	ctx = context.WithValue(ctx, BasicAuthScopes, []string{})
+
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -205,6 +212,8 @@ func (siw *ServerInterfaceWrapper) PostAdminUsers(w http.ResponseWriter, r *http
 	ctx := r.Context()
 
 	ctx = context.WithValue(ctx, AdminKeyScopes, []string{})
+
+	ctx = context.WithValue(ctx, BasicAuthScopes, []string{})
 
 	r = r.WithContext(ctx)
 

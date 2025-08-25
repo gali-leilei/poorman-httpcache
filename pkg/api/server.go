@@ -16,31 +16,85 @@ import (
 
 // Server implements the ServerInterface
 type Server struct {
-	adminService *admin.AdminService
-	db           *pgx.Conn
-	logger       *slog.Logger
-	adminKey     string
+	adminService      *admin.AdminService
+	db                *pgx.Conn
+	logger            *slog.Logger
+	adminKey          string
+	adminUser         string
+	adminPass         string
+	trustTraefikAuth  bool
+	traefikUserHeader string
 }
 
 // NewServer creates a new server instance
 func NewServer(db *pgx.Conn, logger *slog.Logger) (*Server, error) {
 	adminKey := os.Getenv("ADMIN_KEY")
-	if adminKey == "" {
-		return nil, fmt.Errorf("ADMIN_KEY environment variable is required")
+	adminUser := os.Getenv("ADMIN_USERNAME")
+	adminPass := os.Getenv("ADMIN_PASSWORD")
+	trustTraefikAuth := os.Getenv("TRUST_TRAEFIK_AUTH") == "true"
+	traefikUserHeader := os.Getenv("TRAEFIK_USER_HEADER")
+
+	// Set default header if using Traefik auth but no custom header specified
+	if trustTraefikAuth && traefikUserHeader == "" {
+		traefikUserHeader = "X-Authenticated-User"
+	}
+
+	// Validation: require at least one authentication method
+	hasDirectAuth := adminKey != "" || (adminUser != "" && adminPass != "")
+	if !hasDirectAuth && !trustTraefikAuth {
+		return nil, fmt.Errorf("authentication required: set ADMIN_KEY/ADMIN_USERNAME+ADMIN_PASSWORD or enable TRUST_TRAEFIK_AUTH=true")
 	}
 
 	return &Server{
-		adminService: admin.NewAdminService(db),
-		db:           db,
-		logger:       logger,
-		adminKey:     adminKey,
+		adminService:      admin.NewAdminService(db),
+		db:                db,
+		logger:            logger,
+		adminKey:          adminKey,
+		adminUser:         adminUser,
+		adminPass:         adminPass,
+		trustTraefikAuth:  trustTraefikAuth,
+		traefikUserHeader: traefikUserHeader,
 	}, nil
 }
 
 // validateAdminKey validates the X-Admin-Key header
 func (s *Server) validateAdminKey(r *http.Request) bool {
+	if s.adminKey == "" {
+		return false
+	}
 	provided := r.Header.Get("X-Admin-Key")
 	return provided == s.adminKey
+}
+
+// validateBasicAuth validates HTTP Basic Authentication
+func (s *Server) validateBasicAuth(r *http.Request) bool {
+	if s.adminUser == "" || s.adminPass == "" {
+		return false
+	}
+	username, password, ok := r.BasicAuth()
+	return ok && username == s.adminUser && password == s.adminPass
+}
+
+// validateTraefikAuth validates Traefik forwarded authentication
+func (s *Server) validateTraefikAuth(r *http.Request) (bool, string) {
+	if !s.trustTraefikAuth {
+		return false, ""
+	}
+
+	// Check if Traefik forwarded an authenticated user
+	user := r.Header.Get(s.traefikUserHeader)
+	return user != "", user
+}
+
+// validateAdminAuth validates admin authentication (X-Admin-Key, Basic Auth, or Traefik forwarded)
+func (s *Server) validateAdminAuth(r *http.Request) bool {
+	// Try Traefik forwarded auth first
+	if authenticated, _ := s.validateTraefikAuth(r); authenticated {
+		return true
+	}
+
+	// Fall back to direct authentication methods
+	return s.validateAdminKey(r) || s.validateBasicAuth(r)
 }
 
 // writeJSON writes JSON response with proper content type
@@ -108,8 +162,8 @@ func (s *Server) GetPing(w http.ResponseWriter, r *http.Request) {
 // GetAdminUsers lists all users
 func (s *Server) GetAdminUsers(w http.ResponseWriter, r *http.Request) {
 	// Validate admin authentication
-	if !s.validateAdminKey(r) {
-		s.writeError(w, http.StatusUnauthorized, "Missing or invalid X-Admin-Key")
+	if !s.validateAdminAuth(r) {
+		s.writeError(w, http.StatusUnauthorized, "Missing or invalid admin credentials")
 		return
 	}
 
@@ -136,8 +190,8 @@ func (s *Server) GetAdminUsers(w http.ResponseWriter, r *http.Request) {
 // PostAdminUsers creates a new user
 func (s *Server) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
 	// Validate admin authentication
-	if !s.validateAdminKey(r) {
-		s.writeError(w, http.StatusUnauthorized, "Missing or invalid X-Admin-Key")
+	if !s.validateAdminAuth(r) {
+		s.writeError(w, http.StatusUnauthorized, "Missing or invalid admin credentials")
 		return
 	}
 
@@ -177,8 +231,8 @@ func (s *Server) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
 // GetAdminKeys lists all API keys
 func (s *Server) GetAdminKeys(w http.ResponseWriter, r *http.Request) {
 	// Validate admin authentication
-	if !s.validateAdminKey(r) {
-		s.writeError(w, http.StatusUnauthorized, "Missing or invalid X-Admin-Key")
+	if !s.validateAdminAuth(r) {
+		s.writeError(w, http.StatusUnauthorized, "Missing or invalid admin credentials")
 		return
 	}
 
@@ -205,8 +259,8 @@ func (s *Server) GetAdminKeys(w http.ResponseWriter, r *http.Request) {
 // PostAdminKeys creates a new API key
 func (s *Server) PostAdminKeys(w http.ResponseWriter, r *http.Request) {
 	// Validate admin authentication
-	if !s.validateAdminKey(r) {
-		s.writeError(w, http.StatusUnauthorized, "Missing or invalid X-Admin-Key")
+	if !s.validateAdminAuth(r) {
+		s.writeError(w, http.StatusUnauthorized, "Missing or invalid admin credentials")
 		return
 	}
 

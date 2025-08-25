@@ -14,14 +14,30 @@ import (
 //
 // To use this in your main.go:
 // 1. Add DATABASE_URL environment variable for PostgreSQL connection
-// 2. Add ADMIN_KEY environment variable for admin authentication
+// 2. Choose your authentication strategy (pick one or combine):
+//   - Option A: ADMIN_KEY for X-Admin-Key header authentication
+//   - Option B: ADMIN_USERNAME and ADMIN_PASSWORD for HTTP Basic Auth
+//   - Option C: TRUST_TRAEFIK_AUTH to delegate authentication to Traefik
+//
 // 3. Connect to database and create the server instance
 // 4. Add the API routes to your mux
 //
 // Example environment variables:
 //
 //	DATABASE_URL=postgres://user:password@localhost:5432/dbname?sslmode=disable
+//
+//	# Option A: X-Admin-Key header authentication
 //	ADMIN_KEY=your-super-secret-admin-key
+//
+//	# Option B: HTTP Basic Authentication (handled by Go service)
+//	ADMIN_USERNAME=admin
+//	ADMIN_PASSWORD=your-secure-password
+//
+//	# Option C: Delegate authentication to Traefik (recommended for production)
+//	TRUST_TRAEFIK_AUTH=true
+//	TRAEFIK_USER_HEADER=X-Authenticated-User  # Optional, defaults to X-Authenticated-User
+//
+//	# Note: You can combine options. Traefik auth is checked first, then fallback to direct auth
 func ExampleServerIntegration() {
 	// This is example code showing how to integrate with main.go
 	// You would add this to your run() function after creating your mux
@@ -60,10 +76,15 @@ func ExampleServerIntegration() {
 
 	fmt.Println("API endpoints available at:")
 	fmt.Println("  GET /api/ping               - Health check")
-	fmt.Println("  GET /api/admin/users        - List all users (requires X-Admin-Key)")
-	fmt.Println("  POST /api/admin/users       - Create new user (requires X-Admin-Key)")
-	fmt.Println("  GET /api/admin/keys         - List all API keys (requires X-Admin-Key)")
-	fmt.Println("  POST /api/admin/keys        - Create new API key (requires X-Admin-Key)")
+	fmt.Println("  GET /api/admin/users        - List all users (requires admin auth)")
+	fmt.Println("  POST /api/admin/users       - Create new user (requires admin auth)")
+	fmt.Println("  GET /api/admin/keys         - List all API keys (requires admin auth)")
+	fmt.Println("  POST /api/admin/keys        - Create new API key (requires admin auth)")
+	fmt.Println("")
+	fmt.Println("Admin authentication options:")
+	fmt.Println("  Option A: X-Admin-Key header - Add 'X-Admin-Key: your-admin-key' header")
+	fmt.Println("  Option B: HTTP Basic Auth    - Use username/password with Authorization header")
+	fmt.Println("  Option C: Traefik BasicAuth  - Configure Traefik BasicAuth middleware (recommended)")
 }
 
 // Example HTTP requests you can make after integration:
