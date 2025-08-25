@@ -6,17 +6,74 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"time"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+const (
+	AdminKeyScopes = "AdminKey.Scopes"
+)
+
+// ApiKey defines model for ApiKey.
+type ApiKey struct {
+	CreatedAt time.Time `json:"created_at"`
+	HasQuota  bool      `json:"has_quota"`
+	Id        int64     `json:"id"`
+	KeyString string    `json:"key_string"`
+	Status    string    `json:"status"`
+	UpdatedAt time.Time `json:"updated_at"`
+	UserId    int64     `json:"user_id"`
+}
+
+// CreateApiKeyRequest defines model for CreateApiKeyRequest.
+type CreateApiKeyRequest struct {
+	HasQuota  bool   `json:"has_quota"`
+	KeyString string `json:"key_string"`
+	UserId    int64  `json:"user_id"`
+}
+
+// CreateUserRequest defines model for CreateUserRequest.
+type CreateUserRequest struct {
+	Email openapi_types.Email `json:"email"`
+}
 
 // Pong defines model for Pong.
 type Pong struct {
 	Ping string `json:"ping"`
 }
 
+// User defines model for User.
+type User struct {
+	CreatedAt time.Time           `json:"created_at"`
+	Email     openapi_types.Email `json:"email"`
+	Id        int64               `json:"id"`
+	UpdatedAt time.Time           `json:"updated_at"`
+}
+
+// PostAdminKeysJSONRequestBody defines body for PostAdminKeys for application/json ContentType.
+type PostAdminKeysJSONRequestBody = CreateApiKeyRequest
+
+// PostAdminUsersJSONRequestBody defines body for PostAdminUsers for application/json ContentType.
+type PostAdminUsersJSONRequestBody = CreateUserRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// List all API keys
+	// (GET /admin/keys)
+	GetAdminKeys(w http.ResponseWriter, r *http.Request)
+	// Create a new API key
+	// (POST /admin/keys)
+	PostAdminKeys(w http.ResponseWriter, r *http.Request)
+	// List all users
+	// (GET /admin/users)
+	GetAdminUsers(w http.ResponseWriter, r *http.Request)
+	// Create a new user
+	// (POST /admin/users)
+	PostAdminUsers(w http.ResponseWriter, r *http.Request)
 
 	// (GET /ping)
 	GetPing(w http.ResponseWriter, r *http.Request)
@@ -30,6 +87,86 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetAdminKeys operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminKeys(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, AdminKeyScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminKeys(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdminKeys operation middleware
+func (siw *ServerInterfaceWrapper) PostAdminKeys(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, AdminKeyScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdminKeys(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminUsers operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminUsers(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, AdminKeyScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminUsers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdminUsers operation middleware
+func (siw *ServerInterfaceWrapper) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, AdminKeyScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdminUsers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetPing operation middleware
 func (siw *ServerInterfaceWrapper) GetPing(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +302,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc("GET "+options.BaseURL+"/admin/keys", wrapper.GetAdminKeys)
+	m.HandleFunc("POST "+options.BaseURL+"/admin/keys", wrapper.PostAdminKeys)
+	m.HandleFunc("GET "+options.BaseURL+"/admin/users", wrapper.GetAdminUsers)
+	m.HandleFunc("POST "+options.BaseURL+"/admin/users", wrapper.PostAdminUsers)
 	m.HandleFunc("GET "+options.BaseURL+"/ping", wrapper.GetPing)
 
 	return m
