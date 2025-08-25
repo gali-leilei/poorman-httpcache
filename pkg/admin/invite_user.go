@@ -101,8 +101,8 @@ func (as *AdminService) InviteNewUser(ctx context.Context, email string) (*Invit
 		return nil, fmt.Errorf("failed to generate API key: %w", err)
 	}
 
-	// Step 4: Create API key in "unassigned" status
-	apiKey, err := qtx.CreateAPIKey(ctx, &dbsqlc.CreateAPIKeyParams{
+	// Step 4: Create user API key with quota in "unassigned" status
+	apiKey, err := qtx.CreateUserAPIKey(ctx, &dbsqlc.CreateUserAPIKeyParams{
 		UserID:    user.ID,
 		KeyString: keyString,
 	})

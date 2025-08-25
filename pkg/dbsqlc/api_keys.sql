@@ -14,16 +14,22 @@ CREATE INDEX idx_api_keys_status ON api_keys(status);
 
 -- API Key-related queries
 
--- Create new API key in "unassigned" status
--- name: CreateAPIKey :one
-INSERT INTO api_keys (user_id, key_string, status)
-VALUES ($1, $2, 'unassigned')
+-- Create service key with no quota (has_quota = false)
+-- name: CreateServiceKey :one
+INSERT INTO api_keys (user_id, key_string, status, has_quota)
+VALUES ($1, $2, 'unassigned', FALSE)
+RETURNING *;
+
+-- Create user API key with quota (has_quota = true)
+-- name: CreateUserAPIKey :one
+INSERT INTO api_keys (user_id, key_string, status, has_quota)
+VALUES ($1, $2, 'unassigned', TRUE)
 RETURNING *;
 
 -- Batch create API keys (for generating multiple keys at once)
 -- name: BatchCreateAPIKeys :copyfrom
-INSERT INTO api_keys (user_id, key_string, status)
-VALUES ($1, $2, $3);
+INSERT INTO api_keys (user_id, key_string, status, has_quota)
+VALUES ($1, $2, $3, $4);
 
 -- Find an unassigned key for a user
 -- name: GetUnassignedKey :one

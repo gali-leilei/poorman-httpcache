@@ -18,7 +18,7 @@ type ApiKeyServiceQuotas struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
-type ApiKeyServiceUsageLog struct {
+type ApiKeyServiceUsageLogs struct {
 	ID                  int64
 	ApiKeyID            int64
 	ServiceID           int64
@@ -46,6 +46,7 @@ type ApiKeys struct {
 	UserID    int64
 	KeyString string
 	Status    string
+	HasQuota  pgtype.Bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }

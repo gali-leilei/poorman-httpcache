@@ -32,6 +32,7 @@ func (r iteratorForBatchCreateAPIKeys) Values() ([]interface{}, error) {
 		r.rows[0].UserID,
 		r.rows[0].KeyString,
 		r.rows[0].Status,
+		r.rows[0].HasQuota,
 	}, nil
 }
 
@@ -41,7 +42,7 @@ func (r iteratorForBatchCreateAPIKeys) Err() error {
 
 // Batch create API keys (for generating multiple keys at once)
 func (q *Queries) BatchCreateAPIKeys(ctx context.Context, arg []*BatchCreateAPIKeysParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"api_keys"}, []string{"user_id", "key_string", "status"}, &iteratorForBatchCreateAPIKeys{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"api_keys"}, []string{"user_id", "key_string", "status", "has_quota"}, &iteratorForBatchCreateAPIKeys{rows: arg})
 }
 
 // iteratorForBatchInitializeKeyQuotas implements pgx.CopyFromSource.

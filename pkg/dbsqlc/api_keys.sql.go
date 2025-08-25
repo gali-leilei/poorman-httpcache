@@ -15,7 +15,7 @@ const assignKeyToUser = `-- name: AssignKeyToUser :one
 UPDATE api_keys 
 SET user_id = $2, status = 'assigned', updated_at = NOW()
 WHERE key_string = $1 AND status = 'unassigned'
-RETURNING id, user_id, key_string, status, created_at, updated_at
+RETURNING id, user_id, key_string, status, has_quota, created_at, updated_at
 `
 
 type AssignKeyToUserParams struct {
@@ -32,6 +32,7 @@ func (q *Queries) AssignKeyToUser(ctx context.Context, arg *AssignKeyToUserParam
 		&i.UserID,
 		&i.KeyString,
 		&i.Status,
+		&i.HasQuota,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -42,30 +43,59 @@ type BatchCreateAPIKeysParams struct {
 	UserID    int64
 	KeyString string
 	Status    string
+	HasQuota  pgtype.Bool
 }
 
-const createAPIKey = `-- name: CreateAPIKey :one
+const createServiceKey = `-- name: CreateServiceKey :one
 
-INSERT INTO api_keys (user_id, key_string, status)
-VALUES ($1, $2, 'unassigned')
-RETURNING id, user_id, key_string, status, created_at, updated_at
+INSERT INTO api_keys (user_id, key_string, status, has_quota)
+VALUES ($1, $2, 'unassigned', FALSE)
+RETURNING id, user_id, key_string, status, has_quota, created_at, updated_at
 `
 
-type CreateAPIKeyParams struct {
+type CreateServiceKeyParams struct {
 	UserID    int64
 	KeyString string
 }
 
 // API Key-related queries
-// Create new API key in "unassigned" status
-func (q *Queries) CreateAPIKey(ctx context.Context, arg *CreateAPIKeyParams) (*ApiKeys, error) {
-	row := q.db.QueryRow(ctx, createAPIKey, arg.UserID, arg.KeyString)
+// Create service key with no quota (has_quota = false)
+func (q *Queries) CreateServiceKey(ctx context.Context, arg *CreateServiceKeyParams) (*ApiKeys, error) {
+	row := q.db.QueryRow(ctx, createServiceKey, arg.UserID, arg.KeyString)
 	var i ApiKeys
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.KeyString,
 		&i.Status,
+		&i.HasQuota,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const createUserAPIKey = `-- name: CreateUserAPIKey :one
+INSERT INTO api_keys (user_id, key_string, status, has_quota)
+VALUES ($1, $2, 'unassigned', TRUE)
+RETURNING id, user_id, key_string, status, has_quota, created_at, updated_at
+`
+
+type CreateUserAPIKeyParams struct {
+	UserID    int64
+	KeyString string
+}
+
+// Create user API key with quota (has_quota = true)
+func (q *Queries) CreateUserAPIKey(ctx context.Context, arg *CreateUserAPIKeyParams) (*ApiKeys, error) {
+	row := q.db.QueryRow(ctx, createUserAPIKey, arg.UserID, arg.KeyString)
+	var i ApiKeys
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.KeyString,
+		&i.Status,
+		&i.HasQuota,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -73,7 +103,7 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg *CreateAPIKeyParams) (*A
 }
 
 const getAPIKeyWithUser = `-- name: GetAPIKeyWithUser :one
-SELECT ak.id, ak.user_id, ak.key_string, ak.status, ak.created_at, ak.updated_at, u.email as user_email
+SELECT ak.id, ak.user_id, ak.key_string, ak.status, ak.has_quota, ak.created_at, ak.updated_at, u.email as user_email
 FROM api_keys ak
 JOIN users u ON ak.user_id = u.id
 WHERE ak.id = $1
@@ -84,6 +114,7 @@ type GetAPIKeyWithUserRow struct {
 	UserID    int64
 	KeyString string
 	Status    string
+	HasQuota  pgtype.Bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 	UserEmail string
@@ -98,6 +129,7 @@ func (q *Queries) GetAPIKeyWithUser(ctx context.Context, id int64) (*GetAPIKeyWi
 		&i.UserID,
 		&i.KeyString,
 		&i.Status,
+		&i.HasQuota,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserEmail,
@@ -106,7 +138,7 @@ func (q *Queries) GetAPIKeyWithUser(ctx context.Context, id int64) (*GetAPIKeyWi
 }
 
 const getAPIKeysByUserID = `-- name: GetAPIKeysByUserID :many
-SELECT id, user_id, key_string, status, created_at, updated_at FROM api_keys 
+SELECT id, user_id, key_string, status, has_quota, created_at, updated_at FROM api_keys 
 WHERE user_id = $1
 ORDER BY created_at DESC
 `
@@ -126,6 +158,7 @@ func (q *Queries) GetAPIKeysByUserID(ctx context.Context, userID int64) ([]*ApiK
 			&i.UserID,
 			&i.KeyString,
 			&i.Status,
+			&i.HasQuota,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -140,7 +173,7 @@ func (q *Queries) GetAPIKeysByUserID(ctx context.Context, userID int64) ([]*ApiK
 }
 
 const getAssignedAPIKeysByUserID = `-- name: GetAssignedAPIKeysByUserID :many
-SELECT id, user_id, key_string, status, created_at, updated_at FROM api_keys 
+SELECT id, user_id, key_string, status, has_quota, created_at, updated_at FROM api_keys 
 WHERE user_id = $1 AND status = 'assigned'
 ORDER BY created_at DESC
 `
@@ -160,6 +193,7 @@ func (q *Queries) GetAssignedAPIKeysByUserID(ctx context.Context, userID int64) 
 			&i.UserID,
 			&i.KeyString,
 			&i.Status,
+			&i.HasQuota,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -207,7 +241,7 @@ func (q *Queries) GetKeyWithServicesForInitialization(ctx context.Context, id in
 }
 
 const getUnassignedKey = `-- name: GetUnassignedKey :one
-SELECT id, user_id, key_string, status, created_at, updated_at FROM api_keys 
+SELECT id, user_id, key_string, status, has_quota, created_at, updated_at FROM api_keys 
 WHERE status = 'unassigned' AND user_id = $1
 LIMIT 1
 `
@@ -221,6 +255,7 @@ func (q *Queries) GetUnassignedKey(ctx context.Context, userID int64) (*ApiKeys,
 		&i.UserID,
 		&i.KeyString,
 		&i.Status,
+		&i.HasQuota,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -231,7 +266,7 @@ const updateAPIKeyStatus = `-- name: UpdateAPIKeyStatus :one
 UPDATE api_keys 
 SET status = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, user_id, key_string, status, created_at, updated_at
+RETURNING id, user_id, key_string, status, has_quota, created_at, updated_at
 `
 
 type UpdateAPIKeyStatusParams struct {
@@ -248,6 +283,7 @@ func (q *Queries) UpdateAPIKeyStatus(ctx context.Context, arg *UpdateAPIKeyStatu
 		&i.UserID,
 		&i.KeyString,
 		&i.Status,
+		&i.HasQuota,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
