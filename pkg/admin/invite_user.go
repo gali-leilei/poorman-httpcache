@@ -69,10 +69,12 @@ func generateAPIKey() (string, error) {
 	return ServiceKeyPrefix + hex.EncodeToString(bytes), nil
 }
 
-// InviteNewUser assigns an API key to a new user and sets up initial quotas for all services.
+// InviteNewUser assigns an API key to a new user and optionally sets up initial quotas for all services.
+// If isServiceKey is true, creates a service key with no quota limitations.
+// If isServiceKey is false, creates a normal user key with default quotas for all services.
 // This function will return an error if the user already exists.
 // This function uses a transaction to ensure atomicity across multiple database operations
-func (as *AdminService) InviteNewUser(ctx context.Context, email string) (*InviteNewUserResult, error) {
+func (as *AdminService) InviteNewUser(ctx context.Context, email string, isServiceKey bool) (*InviteNewUserResult, error) {
 	// Start transaction
 	tx, err := as.db.Begin(ctx)
 	if err != nil {
@@ -119,36 +121,39 @@ func (as *AdminService) InviteNewUser(ctx context.Context, email string) (*Invit
 		return nil, fmt.Errorf("failed to update API key status: %w", err)
 	}
 
-	// Step 6: Get all services to set up quotas
-	services, err := qtx.GetAllServices(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get services: %w", err)
-	}
-
-	// Step 7: Initialize quotas for all services
+	// Step 6: Initialize quotas only for normal user keys (not service keys)
 	var initialQuotas []*ServiceQuota
-	for _, service := range services {
-		// Get service details to access default quota
-		serviceDetails, err := qtx.GetServiceByName(ctx, service.Name)
+	if !isServiceKey {
+		// Get all services to set up quotas
+		services, err := qtx.GetAllServices(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get service details for %s: %w", service.Name, err)
+			return nil, fmt.Errorf("failed to get services: %w", err)
 		}
 
-		quota, err := qtx.InitializeKeyServiceQuota(ctx, &dbsqlc.InitializeKeyServiceQuotaParams{
-			ApiKeyID:     apiKey.ID,
-			ServiceID:    service.ID,
-			InitialQuota: serviceDetails.DefaultQuota,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize quota for service %s: %w", service.Name, err)
-		}
+		// Initialize quotas for all services
+		for _, service := range services {
+			// Get service details to access default quota
+			serviceDetails, err := qtx.GetServiceByName(ctx, service.Name)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get service details for %s: %w", service.Name, err)
+			}
 
-		// Map to domain model
-		initialQuotas = append(initialQuotas, &ServiceQuota{
-			ServiceName:    service.Name,
-			InitialQuota:   quota.InitialQuota,
-			RemainingQuota: quota.RemainingQuota,
-		})
+			quota, err := qtx.InitializeKeyServiceQuota(ctx, &dbsqlc.InitializeKeyServiceQuotaParams{
+				ApiKeyID:     apiKey.ID,
+				ServiceID:    service.ID,
+				InitialQuota: serviceDetails.DefaultQuota,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize quota for service %s: %w", service.Name, err)
+			}
+
+			// Map to domain model
+			initialQuotas = append(initialQuotas, &ServiceQuota{
+				ServiceName:    service.Name,
+				InitialQuota:   quota.InitialQuota,
+				RemainingQuota: quota.RemainingQuota,
+			})
+		}
 	}
 
 	// Commit transaction
