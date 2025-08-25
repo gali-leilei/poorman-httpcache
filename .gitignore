@@ -36,6 +36,8 @@ secret/secret.jsonc
 
 # local artifacts
 /httpcache
+/internalcache
+dump.rdb
 save_pid.txt
 trace.log
 
