@@ -3,6 +3,7 @@ CREATE TABLE api_keys (
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     key_string TEXT UNIQUE NOT NULL,
     status TEXT NOT NULL DEFAULT 'unassigned' REFERENCES api_key_statuses(name),
+    has_quota BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
