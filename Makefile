@@ -3,7 +3,7 @@
 # generate code with sqlc and oapi-codegen
 codegen:
 	go generate ./pkg/api
-	cd pkg/dbsqlc && sqlc generate
+	go generate ./pkg/dbsqlc
 
 # build two services
 build: codegen
