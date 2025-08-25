@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"httpcache/pkg"
+	"httpcache/pkg/api"
 	"httpcache/pkg/cache"
 	"httpcache/pkg/proxy"
 	"httpcache/pkg/tollgate"
@@ -122,6 +123,14 @@ func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	mux.HandleFunc("/serper/", func(w http.ResponseWriter, r *http.Request) {
 		serperProxy.ServeHTTP(w, r)
 	})
+
+	// Route /docs to serve index.html directly
+	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, api.SwaggerUI, "index.html")
+	})
+
+	// Route /docs/* requests to api.SwaggerUI for other files
+	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.FS(api.SwaggerUI))))
 
 	// Single server listening on port 8080
 	server := &http.Server{
