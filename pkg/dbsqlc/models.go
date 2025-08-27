@@ -19,12 +19,12 @@ type ApiKeyServiceQuotas struct {
 }
 
 type ApiKeyServiceUsageLogs struct {
-	ID                  int64
-	ApiKeyID            int64
-	ServiceID           int64
-	ConsumptionAmount   int32
-	RemainingQuotaAfter int32
-	CreatedAt           pgtype.Timestamptz
+	ID                int64
+	ApiKeyID          int64
+	ServiceID         int64
+	ConsumptionAmount int32
+	MinuteTimestamp   pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
 }
 
 type ApiKeyStatusEvents struct {

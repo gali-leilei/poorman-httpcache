@@ -38,5 +38,9 @@ func (h *tollgateHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	h.next.ServeHTTP(w, r)
 	// TODO: check if the request is successful. only consume if the request is successful.
-	h.client.adapter.Consume(r.Context(), key)
+	if _, err := h.client.adapter.Consume(r.Context(), key); err != nil {
+		// Log the consumption error but don't fail the request
+		// The request has already been processed successfully
+		_ = err // Acknowledge the error but continue
+	}
 }

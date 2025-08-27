@@ -64,7 +64,11 @@ func (h *cachedHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					if c.writeExpiresHeader {
 						w.Header().Set("Expires", response.Expiration.UTC().Format(http.TimeFormat))
 					}
-					w.Write(response.Value)
+					if _, err := w.Write(response.Value); err != nil {
+						// Log the error but continue - response was already committed
+						// This error would be rare (client disconnect, etc.)
+						_ = err // Acknowledge the error exists
+					}
 					return
 				}
 

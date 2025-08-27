@@ -102,6 +102,24 @@ func (q *Queries) CreateUserAPIKey(ctx context.Context, arg *CreateUserAPIKeyPar
 	return &i, err
 }
 
+const getAPIKeyByKeyString = `-- name: GetAPIKeyByKeyString :one
+SELECT id, has_quota, status FROM api_keys WHERE key_string = $1
+`
+
+type GetAPIKeyByKeyStringRow struct {
+	ID       int64
+	HasQuota pgtype.Bool
+	Status   string
+}
+
+// Get API key info by key string (for quota checking)
+func (q *Queries) GetAPIKeyByKeyString(ctx context.Context, keyString string) (*GetAPIKeyByKeyStringRow, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByKeyString, keyString)
+	var i GetAPIKeyByKeyStringRow
+	err := row.Scan(&i.ID, &i.HasQuota, &i.Status)
+	return &i, err
+}
+
 const getAPIKeyWithUser = `-- name: GetAPIKeyWithUser :one
 SELECT ak.id, ak.user_id, ak.key_string, ak.status, ak.has_quota, ak.created_at, ak.updated_at, u.email as user_email
 FROM api_keys ak

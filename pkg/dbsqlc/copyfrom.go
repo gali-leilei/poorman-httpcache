@@ -79,3 +79,40 @@ func (r iteratorForBatchInitializeKeyQuotas) Err() error {
 func (q *Queries) BatchInitializeKeyQuotas(ctx context.Context, arg []*BatchInitializeKeyQuotasParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"api_key_service_quotas"}, []string{"api_key_id", "service_id", "initial_quota"}, &iteratorForBatchInitializeKeyQuotas{rows: arg})
 }
+
+// iteratorForBatchInsertUsageLogs implements pgx.CopyFromSource.
+type iteratorForBatchInsertUsageLogs struct {
+	rows                 []*BatchInsertUsageLogsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForBatchInsertUsageLogs) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForBatchInsertUsageLogs) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ApiKeyID,
+		r.rows[0].ServiceID,
+		r.rows[0].ConsumptionAmount,
+		r.rows[0].MinuteTimestamp,
+		r.rows[0].CreatedAt,
+	}, nil
+}
+
+func (r iteratorForBatchInsertUsageLogs) Err() error {
+	return nil
+}
+
+// Batch insert usage logs for multiple events
+func (q *Queries) BatchInsertUsageLogs(ctx context.Context, arg []*BatchInsertUsageLogsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"api_key_service_usage_logs"}, []string{"api_key_id", "service_id", "consumption_amount", "minute_timestamp", "created_at"}, &iteratorForBatchInsertUsageLogs{rows: arg})
+}

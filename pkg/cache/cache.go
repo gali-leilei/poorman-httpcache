@@ -107,7 +107,11 @@ func BytesToResponse(b []byte) (Response, error) {
 func (r Response) Bytes() []byte {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
-	enc.Encode(&r)
+	if err := enc.Encode(&r); err != nil {
+		// This is unlikely to fail for Response struct, but if it does,
+		// return empty bytes to prevent undefined behavior
+		return []byte{}
+	}
 
 	return b.Bytes()
 }

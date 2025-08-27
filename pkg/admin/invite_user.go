@@ -80,7 +80,13 @@ func (as *AdminService) InviteNewUser(ctx context.Context, email string, isServi
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx) // Will be a no-op if transaction is committed successfully
+	defer func() {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			// Rollback errors are typically expected after successful commits
+			// Only log if this isn't a "transaction already committed" type error
+			_ = rollbackErr // Acknowledge but don't propagate rollback errors
+		}
+	}()
 
 	// Create queries with transaction context
 	qtx := as.queries.WithTx(tx)

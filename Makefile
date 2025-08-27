@@ -1,5 +1,6 @@
 .PHONY: build test debug codegen
 
+
 # generate code with sqlc and oapi-codegen
 codegen:
 	go generate ./pkg/api
@@ -14,6 +15,9 @@ build: codegen
 
 test:
 	go test ./...
+
+lint:
+	golangci-lint run
 
 dev: build
 	set -o allexport && source .env && ./internalcache

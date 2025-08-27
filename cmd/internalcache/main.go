@@ -8,6 +8,7 @@ import (
 	"httpcache/pkg/cache"
 	"httpcache/pkg/proxy"
 	"httpcache/pkg/tollgate"
+	"httpcache/pkg/tollgate/adapter"
 	"log/slog"
 	"net/http"
 	"os"
@@ -69,7 +70,7 @@ func NewJinaProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.Han
 		return nil, err
 	}
 
-	tollgate := tollgate.New(tollgate.NewSecretKeyAdapter(cfg.InternalKey), func(r *http.Request) string {
+	tollgate := tollgate.New(adapter.NewSecretKey(cfg.InternalKey, "jina"), func(r *http.Request) string {
 		// jina key is Authorization: Bearer <key>
 		return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	})
@@ -89,7 +90,7 @@ func NewSerperProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.H
 		logger.Error("Failed to create Serper proxy", "error", err)
 		return nil, err
 	}
-	tollgate := tollgate.New(tollgate.NewSecretKeyAdapter(cfg.InternalKey), func(r *http.Request) string {
+	tollgate := tollgate.New(adapter.NewSecretKey(cfg.InternalKey, "serper"), func(r *http.Request) string {
 		// serper key is X-API-KEY: <key>
 		return r.Header.Get("X-API-KEY")
 	})

@@ -128,7 +128,10 @@ func (s *Server) writeErrorWithTraces(w http.ResponseWriter, statusCode int, mes
 		// Fallback to plain text if JSON encoding fails
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
+		if _, writeErr := w.Write([]byte("Internal server error")); writeErr != nil {
+			// Last resort - log but can't do much else at this point
+			s.logger.Error("Failed to write error response", "error", writeErr)
+		}
 	}
 }
 

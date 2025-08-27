@@ -81,3 +81,7 @@ ORDER BY created_at DESC;
 -- name: GetAllAPIKeys :many
 SELECT * FROM api_keys
 ORDER BY created_at DESC;
+
+-- Get API key info by key string (for quota checking)
+-- name: GetAPIKeyByKeyString :one
+SELECT id, has_quota, status FROM api_keys WHERE key_string = $1;
