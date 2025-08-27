@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -19,7 +20,7 @@ type RedisClient interface {
 // Redis implements the tollgate.Adapter interface using Redis with
 // direct aggregation for PostgreSQL synchronization
 type Redis struct {
-	cache        *KeyMetadataStore
+	keyStore     *MetaStore
 	quotaManager *QuotaManager
 	usageTracker *UsageTracker
 	serviceID    string
@@ -29,15 +30,22 @@ type Redis struct {
 
 // NewRedis creates a new Redis adapter for a specific service with direct aggregation
 func NewRedis(rdb RedisClient, db *dbsqlc.Queries, serviceID string, logger *slog.Logger) *Redis {
-	cache := NewKeyMetadataStore(rdb, db)
-	quotaManager := NewQuotaManager(rdb, db, serviceID)
+	keyStore := NewKeyMetadataStore(rdb, db)
 
 	// Create context for background processes
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create quota manager with service metadata
+	quotaManager, err := NewQuotaManager(ctx, rdb, db, keyStore, serviceID)
+	if err != nil {
+		logger.Error("Failed to create quota manager", "error", err)
+		panic(err) // or handle error appropriately
+	}
+
 	usageTracker := NewUsageTracker(ctx, rdb, db, logger)
 
 	adapter := &Redis{
-		cache:        cache,
+		keyStore:     keyStore,
 		quotaManager: quotaManager,
 		usageTracker: usageTracker,
 		serviceID:    serviceID,
@@ -49,41 +57,36 @@ func NewRedis(rdb RedisClient, db *dbsqlc.Queries, serviceID string, logger *slo
 	return adapter
 }
 
-// Consume implements quota consumption with direct aggregation
-func (r *Redis) Consume(ctx context.Context, key string) (int, error) {
-	// Get cached key metadata
-	metadata, err := r.cache.Get(ctx, key)
+// Reserve reserves a given amount of quota for a key.
+// Returns true if the reservation was successful, false if the quota is insufficient.
+func (r *Redis) Reserve(ctx context.Context, key string, amount int) (bool, error) {
+	// Get cached key keyMeta
+	keyMeta, err := r.keyStore.GetKey(ctx, key)
 	if err != nil {
-		return 0, err
+		return false, fmt.Errorf("r.keyStore.GetKey: %w", err)
 	}
 
-	return r.quotaManager.ConsumeQuota(ctx, key, metadata)
+	ok, err := r.quotaManager.Reserve(ctx, keyMeta, amount)
+	if err != nil {
+		return false, fmt.Errorf("r.quotaManager.Reserve: %w", err)
+	}
+	return ok, nil
 }
 
-// Balance implements the Adapter interface - returns current quota balance
-func (r *Redis) Balance(ctx context.Context, key string) (int, error) {
-	// Get cached key metadata
-	metadata, err := r.cache.Get(ctx, key)
+// Refund refunds a given amount of quota for a key.
+// Returns true if the refund was successful, false if the quota is insufficient.
+func (r *Redis) Refund(ctx context.Context, key string, amount int) (bool, error) {
+	// Get cached key keyMeta
+	keyMeta, err := r.keyStore.GetKey(ctx, key)
 	if err != nil {
-		return 0, err
+		return false, fmt.Errorf("r.keyStore.GetKey: %w", err)
 	}
 
-	return r.quotaManager.GetBalance(ctx, key, metadata)
-}
-
-// ServiceID returns the service ID this adapter is configured for
-func (r *Redis) ServiceID() string {
-	return r.serviceID
-}
-
-// BatchUpdateQuotas provides batch quota operations for administrative tasks
-func (r *Redis) BatchUpdateQuotas(ctx context.Context, updates map[string]int) error {
-	return r.quotaManager.BatchUpdateQuotas(ctx, updates)
-}
-
-// InvalidateKeyCache removes cached metadata for a key
-func (r *Redis) InvalidateKeyCache(ctx context.Context, key string) error {
-	return r.cache.Reset(ctx, key)
+	ok, err := r.quotaManager.Refund(ctx, keyMeta, amount)
+	if err != nil {
+		return false, fmt.Errorf("r.quotaManager.Refund: %w", err)
+	}
+	return ok, nil
 }
 
 // Shutdown gracefully shuts down the Redis adapter

@@ -6,165 +6,235 @@ import (
 	"strconv"
 	"time"
 
-	"httpcache/pkg/dbsqlc"
+	"golang.org/x/sync/singleflight"
 
-	"github.com/redis/go-redis/v9"
+	"httpcache/pkg/dbsqlc"
 )
 
 // QuotaManager handles quota operations in Redis
 type QuotaManager struct {
-	redis     RedisClient
-	db        *dbsqlc.Queries
-	serviceID string
+	redis           RedisClient
+	db              *dbsqlc.Queries
+	serviceID       string
+	serviceMetadata *ServiceMetadata
+	sfGroup         singleflight.Group
 }
 
 // NewQuotaManager creates a new quota manager
-func NewQuotaManager(redis RedisClient, db *dbsqlc.Queries, serviceID string) *QuotaManager {
-	return &QuotaManager{
-		redis:     redis,
-		db:        db,
-		serviceID: serviceID,
+func NewQuotaManager(ctx context.Context, redis RedisClient, db *dbsqlc.Queries, metaStore *MetaStore, serviceName string) (*QuotaManager, error) {
+	// Get service metadata
+	serviceMeta, err := metaStore.GetService(ctx, serviceName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get service metadata: %w", err)
 	}
+
+	return &QuotaManager{
+		redis:           redis,
+		db:              db,
+		serviceID:       serviceName,
+		serviceMetadata: serviceMeta,
+	}, nil
 }
 
-// ConsumeQuota attempts to consume quota and returns remaining balance
-func (qm *QuotaManager) ConsumeQuota(ctx context.Context, apiKey string, metadata *KeyMetadata) (int, error) {
-	serviceKey := fmt.Sprintf("service_%s", qm.serviceID)
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-
+// Reserve attempts to reserve a given amount of quota and returns success status
+func (qm *QuotaManager) Reserve(ctx context.Context, keyMeta *KeyMetadata, amount int) (bool, error) {
 	// Construct keys explicitly for Redis clustering compatibility
-	quotaKey := fmt.Sprintf("quota:%s", apiKey)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	minuteTimestamp := time.Now().Truncate(time.Minute)
-	bufferKey := fmt.Sprintf("usage_buffer:%s:%s:%d", metadata.APIKeyID, qm.serviceID, minuteTimestamp.Unix())
 
-	result, err := ConsumeQuotaScript.Run(ctx, qm.redis,
-		[]string{quotaKey, bufferKey},
-		serviceKey, strconv.FormatBool(metadata.HasQuota), timestamp).Result()
+	keys := []string{
+		fmt.Sprintf("quota:%s", keyMeta.APIKey),
+		fmt.Sprintf("service_%s", qm.serviceMetadata.ServiceName),
+		fmt.Sprintf("usage:%s:%s:%d", keyMeta.APIKey, qm.serviceMetadata.ServiceName, minuteTimestamp.Unix()),
+	}
+
+	argv := []interface{}{
+		strconv.FormatBool(keyMeta.HasQuota),
+		strconv.Itoa(amount),
+		timestamp,
+	}
+	result, err := ReserveQuotaScript.Run(ctx, qm.redis, keys, argv...).Result()
 	if err != nil {
-		return 0, fmt.Errorf("redis consume failed: %w", err)
+		return false, fmt.Errorf("ReserveQuotaScript.Run: %w", err)
 	}
 
 	// Safely convert Redis script result
 	values, ok := result.([]interface{})
 	if !ok {
-		return 0, fmt.Errorf("redis script returned unexpected type, expected []interface{}, got %T", result)
+		return false, fmt.Errorf("redis script returned unexpected type, expected []interface{}, got %T", result)
 	}
 
 	if len(values) != 2 {
-		return 0, fmt.Errorf("redis script returned unexpected array length, expected 2, got %d", len(values))
+		return false, fmt.Errorf("redis script returned unexpected array length, expected 2, got %d", len(values))
 	}
 
-	remaining, ok := values[0].(int64)
-	if !ok {
-		return 0, fmt.Errorf("redis script returned unexpected type for remaining quota, expected int64, got %T", values[0])
+	_, err = strconv.ParseInt(values[0].(string), 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("redis script returned unexpected type for remaining quota, expected int64, got %T", values[0])
 	}
 
 	status, ok := values[1].(string)
 	if !ok {
-		return 0, fmt.Errorf("redis script returned unexpected type for status, expected string, got %T", values[1])
+		return false, fmt.Errorf("redis script returned unexpected type for status, expected string, got %T", values[1])
 	}
 
 	switch status {
 	case "LOAD_REQUIRED":
-		return qm.loadAndConsume(ctx, apiKey, metadata)
+		return qm.setAndReserve(ctx, keyMeta, amount)
 	case "EXHAUSTED":
-		return 0, fmt.Errorf("quota exhausted")
+		return false, nil // Not an error, just insufficient quota
 	case "OK":
-		return int(remaining), nil
+		return true, nil
 	default:
-		return 0, fmt.Errorf("unknown status: %s", status)
+		return false, fmt.Errorf("unknown status: %s", status)
 	}
 }
 
-// GetBalance returns the current quota balance
-func (qm *QuotaManager) GetBalance(ctx context.Context, apiKey string, metadata *KeyMetadata) (int, error) {
-	// No-quota keys always return unlimited
-	if !metadata.HasQuota {
-		return 999999, nil
+// Refund refunds a given amount of quota for a key
+func (qm *QuotaManager) Refund(ctx context.Context, keyMeta *KeyMetadata, amount int) (bool, error) {
+	// No-quota keys always return unlimited - nothing to refund
+	if !keyMeta.HasQuota {
+		return true, nil
 	}
 
-	quotaKey := fmt.Sprintf("quota:%s", apiKey)
-	serviceKey := fmt.Sprintf("service_%s", qm.serviceID)
+	serviceKey := fmt.Sprintf("service_%s", qm.serviceMetadata.ServiceName)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 
-	// Use HGET to check balance for this service
-	result, err := qm.redis.HGet(ctx, quotaKey, serviceKey).Result()
-	if err == redis.Nil {
-		// Not in cache, load from PostgreSQL
-		balance, err := qm.db.GetBalanceByKeyString(ctx, apiKey)
-		if err != nil {
-			return 0, fmt.Errorf("failed to get balance: %w", err)
-		}
+	// Construct keys explicitly for Redis clustering compatibility
+	quotaKey := fmt.Sprintf("quota:%s", keyMeta.APIKey)
+	minuteTimestamp := time.Now().Truncate(time.Minute)
+	usageKey := fmt.Sprintf("usage:%s:%s:%d", keyMeta.APIKey, qm.serviceMetadata.ServiceName, minuteTimestamp.Unix())
 
-		// Cache using HSET with metadata
-		qm.redis.HMSet(ctx, quotaKey, map[string]interface{}{
-			serviceKey:  balance,
-			"loaded_at": time.Now().Unix(),
-			"load_type": "balance_check",
-		})
-		qm.redis.Expire(ctx, quotaKey, time.Hour)
-
-		return int(balance), nil
-	}
+	result, err := RefundQuotaScript.Run(ctx, qm.redis,
+		[]string{quotaKey, usageKey},
+		serviceKey, strconv.Itoa(amount), timestamp).Result()
 	if err != nil {
-		return 0, fmt.Errorf("redis hget failed: %w", err)
+		return false, fmt.Errorf("redis refund failed: %w", err)
 	}
 
-	remaining, _ := strconv.Atoi(result)
-	return remaining, nil
+	// Safely convert Redis script result
+	values, ok := result.([]interface{})
+	if !ok {
+		return false, fmt.Errorf("redis script returned unexpected type, expected []interface{}, got %T", result)
+	}
+
+	if len(values) != 2 {
+		return false, fmt.Errorf("redis script returned unexpected array length, expected 2, got %d", len(values))
+	}
+
+	_, ok = values[0].(int64)
+	if !ok {
+		return false, fmt.Errorf("redis script returned unexpected type for remaining quota, expected int64, got %T", values[0])
+	}
+
+	status, ok := values[1].(string)
+	if !ok {
+		return false, fmt.Errorf("redis script returned unexpected type for status, expected string, got %T", values[1])
+	}
+
+	switch status {
+	case "NO_QUOTA":
+		// No quota key exists in Redis - this is not an error, just means nothing to refund
+		return true, nil
+	case "OK":
+		return true, nil
+	default:
+		return false, fmt.Errorf("unknown refund status: %s", status)
+	}
 }
 
-// loadAndConsume loads quota from PostgreSQL and consumes it atomically
-func (qm *QuotaManager) loadAndConsume(ctx context.Context, keyString string, metadata *KeyMetadata) (int, error) {
+// setAndReserve loads quota from PostgreSQL and reserves it atomically using singleflight
+func (qm *QuotaManager) setAndReserve(ctx context.Context, keyMeta *KeyMetadata, amount int) (bool, error) {
 	// Only load balance if key has quota
-	if !metadata.HasQuota {
+	if !keyMeta.HasQuota {
 		// For no-quota keys, just track consumption and return unlimited
-		qm.trackConsumption(ctx, metadata.APIKeyID, qm.serviceID, 1)
-		return 999999, nil
+		qm.trackConsumption(ctx, keyMeta, amount)
+		return true, nil
 	}
 
-	// Load from PostgreSQL for quota keys
-	balance, err := qm.db.GetBalanceByKeyString(ctx, keyString)
+	// Use singleflight to prevent concurrent loads for the same API key
+	key := fmt.Sprintf("%s:%s", keyMeta.APIKey, qm.serviceMetadata.ServiceName)
+	result, err, _ := qm.sfGroup.Do(key, func() (interface{}, error) {
+		return qm.loadAndSetQuota(ctx, keyMeta)
+	})
+
 	if err != nil {
-		return 0, fmt.Errorf("failed to load balance: %w", err)
+		return false, fmt.Errorf("failed to load quota: %w", err)
 	}
 
-	if balance <= 0 {
-		return 0, fmt.Errorf("quota exhausted")
+	initialQuota, ok := result.(int32)
+	if !ok {
+		return false, fmt.Errorf("singleflight returned unexpected type: %T", result)
 	}
 
-	quotaKey := fmt.Sprintf("quota:%s", keyString)
-	serviceKey := fmt.Sprintf("service_%s", qm.serviceID)
+	// Now reserve the amount using the simplified set_and_reserve script
+	quotaKey := fmt.Sprintf("quota:%s", keyMeta.APIKey)
+	serviceKey := fmt.Sprintf("service_%s", qm.serviceMetadata.ServiceName)
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	// Construct usage buffer key explicitly for Redis clustering compatibility
 	minuteTimestamp := time.Now().Truncate(time.Minute)
-	bufferKey := fmt.Sprintf("usage_buffer:%s:%s:%d", metadata.APIKeyID, qm.serviceID, minuteTimestamp.Unix())
+	usageKey := fmt.Sprintf("usage:%s:%s:%d", keyMeta.APIKey, qm.serviceMetadata.ServiceName, minuteTimestamp.Unix())
 
-	result, err := LoadAndConsumeScript.Run(ctx, qm.redis,
-		[]string{quotaKey, bufferKey},
-		serviceKey, strconv.Itoa(int(balance)), timestamp).Result()
+	scriptResult, err := SetAndReserveScript.Run(ctx, qm.redis,
+		[]string{quotaKey, usageKey},
+		serviceKey, strconv.Itoa(int(initialQuota)), strconv.Itoa(amount), timestamp).Result()
 	if err != nil {
-		return 0, fmt.Errorf("failed to load and consume: %w", err)
+		return false, fmt.Errorf("failed to set and reserve: %w", err)
 	}
 
-	// Safely convert Redis script result
-	remaining, ok := result.(int64)
+	// Safely convert Redis script result - should match reserve.lua format
+	values, ok := scriptResult.([]interface{})
 	if !ok {
-		return 0, fmt.Errorf("redis script returned unexpected type for remaining quota, expected int64, got %T", result)
+		return false, fmt.Errorf("redis script returned unexpected type, expected []interface{}, got %T", scriptResult)
 	}
 
-	return int(remaining), nil
+	if len(values) != 2 {
+		return false, fmt.Errorf("redis script returned unexpected array length, expected 2, got %d", len(values))
+	}
+
+	_, err = strconv.ParseInt(values[0].(string), 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("redis script returned unexpected type for remaining quota, expected int64, got %T", values[0])
+	}
+
+	status, ok := values[1].(string)
+	if !ok {
+		return false, fmt.Errorf("redis script returned unexpected type for status, expected string, got %T", values[1])
+	}
+
+	switch status {
+	case "EXHAUSTED":
+		return false, nil // Not an error, just insufficient quota
+	case "OK":
+		return true, nil
+	default:
+		return false, fmt.Errorf("unknown status: %s", status)
+	}
+}
+
+// loadAndSetQuota loads quota from PostgreSQL - used by singleflight
+func (qm *QuotaManager) loadAndSetQuota(ctx context.Context, keyMeta *KeyMetadata) (interface{}, error) {
+	balance, err := qm.db.GetBalanceByID(ctx, &dbsqlc.GetBalanceByIDParams{
+		ApiKeyID:  keyMeta.APIKeyID,
+		ServiceID: qm.serviceMetadata.ServiceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to load balance: %w", err)
+	}
+
+	return balance.RemainingQuota, nil
 }
 
 // trackConsumption tracks consumption for no-quota keys using direct aggregation
-func (qm *QuotaManager) trackConsumption(ctx context.Context, apiKey string, serviceName string, amount int) {
+func (qm *QuotaManager) trackConsumption(ctx context.Context, keyMeta *KeyMetadata, amount int) {
 	minuteTimestamp := time.Now().Truncate(time.Minute)
-	bufferKey := fmt.Sprintf("usage_buffer:%s:%s:%d", apiKey, serviceName, minuteTimestamp.Unix())
+	usageKey := fmt.Sprintf("usage:%s:%s:%d", keyMeta.APIKey, qm.serviceMetadata.ServiceName, minuteTimestamp.Unix())
 
 	// Increment counter and set TTL
 	pipe := qm.redis.Pipeline()
-	pipe.IncrBy(ctx, bufferKey, int64(amount))
-	pipe.Expire(ctx, bufferKey, 2*time.Hour)
+	pipe.IncrBy(ctx, usageKey, int64(amount))
+	pipe.Expire(ctx, usageKey, 2*time.Hour)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		// Log the error but don't fail the request - usage tracking is best effort
@@ -178,7 +248,7 @@ func (qm *QuotaManager) trackConsumption(ctx context.Context, apiKey string, ser
 func (qm *QuotaManager) BatchUpdateQuotas(ctx context.Context, updates map[string]int) error {
 	pipe := qm.redis.Pipeline()
 
-	serviceKey := fmt.Sprintf("service_%s", qm.serviceID)
+	serviceKey := fmt.Sprintf("service_%s", qm.serviceMetadata.ServiceName)
 	for keyString, quota := range updates {
 		quotaKey := fmt.Sprintf("quota:%s", keyString)
 		pipe.HSet(ctx, quotaKey, serviceKey, quota, "updated_at", time.Now().Unix())

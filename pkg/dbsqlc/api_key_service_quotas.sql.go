@@ -91,19 +91,54 @@ func (q *Queries) GetAPIKeyQuotas(ctx context.Context, apiKeyID int64) ([]*GetAP
 	return items, nil
 }
 
-const getBalanceByKeyString = `-- name: GetBalanceByKeyString :one
-SELECT COALESCE(SUM(aksq.remaining_quota), 0)::INT as total_balance
+const getBalanceByID = `-- name: GetBalanceByID :one
+SELECT aksq.initial_quota, aksq.remaining_quota
 FROM api_key_service_quotas aksq
-JOIN api_keys ak ON aksq.api_key_id = ak.id
-WHERE ak.key_string = $1 AND ak.status = 'assigned'
+WHERE aksq.api_key_id = $1 and aksq.service_id = $2
 `
 
-// Get balance (remaining quota) for an API key by key_string
-func (q *Queries) GetBalanceByKeyString(ctx context.Context, keyString string) (int32, error) {
-	row := q.db.QueryRow(ctx, getBalanceByKeyString, keyString)
-	var total_balance int32
-	err := row.Scan(&total_balance)
-	return total_balance, err
+type GetBalanceByIDParams struct {
+	ApiKeyID  int64
+	ServiceID int64
+}
+
+type GetBalanceByIDRow struct {
+	InitialQuota   int32
+	RemainingQuota int32
+}
+
+// Get balance (remaining quota) for an API key by key_string and service_id
+func (q *Queries) GetBalanceByID(ctx context.Context, arg *GetBalanceByIDParams) (*GetBalanceByIDRow, error) {
+	row := q.db.QueryRow(ctx, getBalanceByID, arg.ApiKeyID, arg.ServiceID)
+	var i GetBalanceByIDRow
+	err := row.Scan(&i.InitialQuota, &i.RemainingQuota)
+	return &i, err
+}
+
+const getBalanceByName = `-- name: GetBalanceByName :one
+SELECT aksq.initial_quota, aksq.remaining_quota
+FROM api_key_service_quotas aksq
+JOIN services s ON aksq.service_id = s.id
+JOIN api_keys ak ON aksq.api_key_id = ak.id
+WHERE ak.key_string = $1 and s.name = $2
+`
+
+type GetBalanceByNameParams struct {
+	KeyString string
+	Name      string
+}
+
+type GetBalanceByNameRow struct {
+	InitialQuota   int32
+	RemainingQuota int32
+}
+
+// Get balance (remaining quota) for an API key by key_string and service_id
+func (q *Queries) GetBalanceByName(ctx context.Context, arg *GetBalanceByNameParams) (*GetBalanceByNameRow, error) {
+	row := q.db.QueryRow(ctx, getBalanceByName, arg.KeyString, arg.Name)
+	var i GetBalanceByNameRow
+	err := row.Scan(&i.InitialQuota, &i.RemainingQuota)
+	return &i, err
 }
 
 const initializeKeyServiceQuota = `-- name: InitializeKeyServiceQuota :one

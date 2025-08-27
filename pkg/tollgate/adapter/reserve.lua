@@ -1,9 +1,10 @@
 -- All keys must be explicitly provided for Redis clustering compatibility
 local quotaKey = KEYS[1]    -- Pre-constructed "quota:{apikey}" key
-local bufferKey = KEYS[2]   -- Pre-constructed usage buffer key
+local usageKey = KEYS[2]   -- Pre-constructed usage buffer key
 local serviceKey = ARGV[1]  -- Service key for hash field
 local hasQuota = ARGV[2] == "true"
-local timestamp = ARGV[3]
+local amount = tonumber(ARGV[3])  -- Amount to reserve
+local timestamp = ARGV[4]
 
 -- Get current quota only if has_quota is true
 local remaining = -1
@@ -16,12 +17,12 @@ if hasQuota then
 	end
 	
 	remaining = tonumber(current)
-	if remaining <= 0 then
-		return {0, 'EXHAUSTED'}
+	if remaining < amount then
+		return {remaining, 'EXHAUSTED'}
 	end
 	
-	-- Decrement quota
-	remaining = remaining - 1
+	-- Decrement quota by amount
+	remaining = remaining - amount
 	redis.call('HSET', quotaKey, serviceKey, remaining)
 	redis.call('HSET', quotaKey, 'last_used', timestamp)
 else
@@ -30,7 +31,7 @@ else
 end
 
 -- Direct aggregation - increment usage buffer (key pre-constructed by caller)
-redis.call('INCRBY', bufferKey, 1)
-redis.call('EXPIRE', bufferKey, 7200) -- 2 hour TTL
+redis.call('INCRBY', usageKey, amount)
+redis.call('EXPIRE', usageKey, 7200) -- 2 hour TTL
 
 return {remaining, 'OK'}

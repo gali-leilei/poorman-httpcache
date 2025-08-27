@@ -21,20 +21,24 @@ func NewSecretKey(secretKey, serviceID string) tollgate.Adapter {
 	}
 }
 
-// Consume validates the key and returns 1 if valid
-func (s *SecretKey) Consume(ctx context.Context, key string) (int, error) {
+// Reserve reserves a given amount of quota for a key.
+// Returns true if the reservation was successful, false if the quota is insufficient.
+func (s *SecretKey) Reserve(ctx context.Context, key string, amount int) (bool, error) {
 	if key != s.secretKey {
-		return 0, fmt.Errorf("invalid key")
+		return false, fmt.Errorf("invalid key")
 	}
-	return 1, nil
+	// SecretKey adapter allows unlimited quota for valid keys
+	return true, nil
 }
 
-// Balance validates the key and returns 1 if valid
-func (s *SecretKey) Balance(ctx context.Context, key string) (int, error) {
+// Refund refunds a given amount of quota for a key.
+// Returns true if the refund was successful, false if the quota is insufficient.
+func (s *SecretKey) Refund(ctx context.Context, key string, amount int) (bool, error) {
 	if key != s.secretKey {
-		return 0, fmt.Errorf("invalid key")
+		return false, fmt.Errorf("invalid key")
 	}
-	return 1, nil
+	// SecretKey adapter always allows refunds for valid keys
+	return true, nil
 }
 
 // ServiceID returns the service ID this adapter is configured for

@@ -6,14 +6,20 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-//go:embed consume_quota.lua
-var consumeQuotaScript string
+//go:embed reserve.lua
+var reserveQuotaScript string
 
-//go:embed load_and_consume.lua
-var loadAndConsumeScript string
+//go:embed set_and_reserve.lua
+var setAndReserveQuotaScript string
 
-// ConsumeQuotaScript is the Redis script for consuming quota
-var ConsumeQuotaScript = redis.NewScript(consumeQuotaScript)
+//go:embed refund.lua
+var refundQuotaScript string
 
-// LoadAndConsumeScript is the Redis script for loading and consuming quota
-var LoadAndConsumeScript = redis.NewScript(loadAndConsumeScript)
+// ReserveQuotaScript is the Redis script for consuming quota
+var ReserveQuotaScript = redis.NewScript(reserveQuotaScript)
+
+// SetAndReserveScript is the Redis script for setting and consuming quota
+var SetAndReserveScript = redis.NewScript(setAndReserveQuotaScript)
+
+// RefundQuotaScript is the Redis script for refunding quota
+var RefundQuotaScript = redis.NewScript(refundQuotaScript)

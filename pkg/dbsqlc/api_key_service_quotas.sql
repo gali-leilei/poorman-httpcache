@@ -36,12 +36,20 @@ FROM api_key_service_quotas aksq
 JOIN services s ON aksq.service_id = s.id
 WHERE aksq.api_key_id = $1;
 
--- Get balance (remaining quota) for an API key by key_string
--- name: GetBalanceByKeyString :one
-SELECT COALESCE(SUM(aksq.remaining_quota), 0)::INT as total_balance
+-- Get balance (remaining quota) for an API key by key_string and service_id
+-- name: GetBalanceByID :one
+SELECT aksq.initial_quota, aksq.remaining_quota
 FROM api_key_service_quotas aksq
+WHERE aksq.api_key_id = $1 and aksq.service_id = $2;
+
+-- Get balance (remaining quota) for an API key by key_string and service_id
+-- name: GetBalanceByName :one
+SELECT aksq.initial_quota, aksq.remaining_quota
+FROM api_key_service_quotas aksq
+JOIN services s ON aksq.service_id = s.id
 JOIN api_keys ak ON aksq.api_key_id = ak.id
-WHERE ak.key_string = $1 AND ak.status = 'assigned';
+WHERE ak.key_string = $1 and s.name = $2;
+
 
 -- Consume quota for an API key by key_string (decreases by 1 unit)
 -- name: ConsumeQuotaByKeyString :one

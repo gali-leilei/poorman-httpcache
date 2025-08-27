@@ -43,7 +43,7 @@ type BatchCreateAPIKeysParams struct {
 	UserID    int64
 	KeyString string
 	Status    string
-	HasQuota  pgtype.Bool
+	HasQuota  bool
 }
 
 const createServiceKey = `-- name: CreateServiceKey :one
@@ -103,20 +103,26 @@ func (q *Queries) CreateUserAPIKey(ctx context.Context, arg *CreateUserAPIKeyPar
 }
 
 const getAPIKeyByKeyString = `-- name: GetAPIKeyByKeyString :one
-SELECT id, has_quota, status FROM api_keys WHERE key_string = $1
+SELECT id, key_string,has_quota, status FROM api_keys WHERE key_string = $1
 `
 
 type GetAPIKeyByKeyStringRow struct {
-	ID       int64
-	HasQuota pgtype.Bool
-	Status   string
+	ID        int64
+	KeyString string
+	HasQuota  bool
+	Status    string
 }
 
 // Get API key info by key string (for quota checking)
 func (q *Queries) GetAPIKeyByKeyString(ctx context.Context, keyString string) (*GetAPIKeyByKeyStringRow, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByKeyString, keyString)
 	var i GetAPIKeyByKeyStringRow
-	err := row.Scan(&i.ID, &i.HasQuota, &i.Status)
+	err := row.Scan(
+		&i.ID,
+		&i.KeyString,
+		&i.HasQuota,
+		&i.Status,
+	)
 	return &i, err
 }
 
@@ -132,7 +138,7 @@ type GetAPIKeyWithUserRow struct {
 	UserID    int64
 	KeyString string
 	Status    string
-	HasQuota  pgtype.Bool
+	HasQuota  bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 	UserEmail string

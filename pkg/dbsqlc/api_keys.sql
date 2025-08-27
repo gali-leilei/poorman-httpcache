@@ -3,9 +3,9 @@ CREATE TABLE api_keys (
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     key_string TEXT UNIQUE NOT NULL,
     status TEXT NOT NULL DEFAULT 'unassigned' REFERENCES api_key_statuses(name),
-    has_quota BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    has_quota BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE UNIQUE INDEX idx_api_keys_key_string ON api_keys(key_string);
@@ -84,4 +84,4 @@ ORDER BY created_at DESC;
 
 -- Get API key info by key string (for quota checking)
 -- name: GetAPIKeyByKeyString :one
-SELECT id, has_quota, status FROM api_keys WHERE key_string = $1;
+SELECT id, key_string,has_quota, status FROM api_keys WHERE key_string = $1;

@@ -64,13 +64,13 @@ func (ut *UsageTracker) aggregationFlusher(ctx context.Context) {
 
 // flushAggregatedUsage flushes buffered minute aggregations to PostgreSQL
 func (ut *UsageTracker) flushAggregatedUsage(ctx context.Context) error {
-	pattern := "usage_buffer:*"
+	pattern := "usage:*"
 	iter := ut.redis.Scan(ctx, 0, pattern, 100).Iterator()
 
 	flushed := 0
 	for iter.Next(ctx) {
 		key := iter.Val()
-		// Parse key: usage_buffer:{api_key_id}:{service_id}:{minute_timestamp}
+		// Parse key: usage:{api_key_id}:{service_id}:{minute_timestamp}
 		parts := strings.Split(key, ":")
 		if len(parts) != 4 {
 			continue

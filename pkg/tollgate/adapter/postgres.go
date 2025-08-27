@@ -10,37 +10,46 @@ import (
 
 // Postgres implements the tollgate.Adapter interface using PostgreSQL
 type Postgres struct {
-	queries   *dbsqlc.Queries
-	serviceID string
+	queries     *dbsqlc.Queries
+	serviceName string
 }
 
 // NewPostgres creates a new PostgreSQL adapter for a specific service
-func NewPostgres(db dbsqlc.DBTX, serviceID string) tollgate.Adapter {
+func NewPostgres(db dbsqlc.DBTX, serviceName string) tollgate.Adapter {
 	return &Postgres{
-		queries:   dbsqlc.New(db),
-		serviceID: serviceID,
+		queries:     dbsqlc.New(db),
+		serviceName: serviceName,
 	}
 }
 
-// Consume decrements the quota for the given API key and returns remaining balance
-func (p *Postgres) Consume(ctx context.Context, key string) (int, error) {
+// Reserve reserves a given amount of quota for a key.
+// Returns true if the reservation was successful, false if the quota is insufficient.
+func (p *Postgres) Reserve(ctx context.Context, key string, amount int) (bool, error) {
+	// For now, we consume the quota upfront (actual reservation logic needs implementation)
 	balance, err := p.queries.ConsumeQuotaByKeyString(ctx, key)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
-	return int(balance), nil
+	// Return true if we have sufficient balance (simplified logic)
+	return int(balance) >= amount, nil
 }
 
-// Balance returns the current quota balance for the given API key
-func (p *Postgres) Balance(ctx context.Context, key string) (int, error) {
-	balance, err := p.queries.GetBalanceByKeyString(ctx, key)
+// Refund refunds a given amount of quota for a key.
+// Returns true if the refund was successful, false if the quota is insufficient.
+func (p *Postgres) Refund(ctx context.Context, key string, amount int) (bool, error) {
+	// TODO: Implement proper quota refunding mechanism in database
+	// For now, always return true as refunding mechanism needs to be implemented
+	_, err := p.queries.GetBalanceByName(ctx, &dbsqlc.GetBalanceByNameParams{
+		KeyString: key,
+		Name:      p.serviceName,
+	})
 	if err != nil {
-		return 0, err
+		return false, err
 	}
-	return int(balance), nil
+	return true, nil
 }
 
 // ServiceID returns the service ID this adapter is configured for
 func (p *Postgres) ServiceID() string {
-	return p.serviceID
+	return p.serviceName
 }

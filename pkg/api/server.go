@@ -151,7 +151,7 @@ func mapDBAPIKeyToAPIKey(dbAPIKey *dbsqlc.ApiKeys) ApiKey {
 		UserId:    dbAPIKey.UserID,
 		KeyString: dbAPIKey.KeyString,
 		Status:    dbAPIKey.Status,
-		HasQuota:  dbAPIKey.HasQuota.Bool,
+		HasQuota:  dbAPIKey.HasQuota,
 		CreatedAt: dbAPIKey.CreatedAt.Time,
 		UpdatedAt: dbAPIKey.UpdatedAt.Time,
 	}

@@ -46,7 +46,7 @@ type ApiKeys struct {
 	UserID    int64
 	KeyString string
 	Status    string
-	HasQuota  pgtype.Bool
+	HasQuota  bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
