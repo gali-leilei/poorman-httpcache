@@ -2,11 +2,9 @@ package adapter
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"httpcache/pkg/dbsqlc"
@@ -14,56 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// UsageTracker handles usage aggregation and flushing to PostgreSQL
+// UsageTracker handles usage data aggregation and flushing to database
 type UsageTracker struct {
 	redis  RedisClient
 	db     *dbsqlc.Queries
 	logger *slog.Logger
-	ctx    context.Context
-	wg     sync.WaitGroup
 }
 
-// NewUsageTracker creates a new usage tracker
+// NewUsageTracker creates a new usage tracker without background processing
 func NewUsageTracker(ctx context.Context, redis RedisClient, db *dbsqlc.Queries, logger *slog.Logger) *UsageTracker {
-	tracker := &UsageTracker{
+	return &UsageTracker{
 		redis:  redis,
 		db:     db,
 		logger: logger,
-		ctx:    ctx,
-	}
-
-	// Start background aggregation flusher
-	tracker.wg.Add(1)
-	go tracker.aggregationFlusher(ctx)
-
-	return tracker
-}
-
-// aggregationFlusher periodically flushes aggregated usage data to PostgreSQL
-func (ut *UsageTracker) aggregationFlusher(ctx context.Context) {
-	defer ut.wg.Done()
-
-	ticker := time.NewTicker(30 * time.Second) // Flush every 30 seconds
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := ut.flushAggregatedUsage(ut.ctx); err != nil {
-				ut.logger.Error("Failed to flush aggregated usage", "error", err)
-			}
-		case <-ctx.Done():
-			// Final flush before shutdown - ignore errors during shutdown
-			if err := ut.flushAggregatedUsage(ctx); err != nil {
-				ut.logger.Error("Failed to flush during shutdown", "error", err)
-			}
-			return
-		}
 	}
 }
 
-// flushAggregatedUsage flushes buffered minute aggregations to PostgreSQL
-func (ut *UsageTracker) flushAggregatedUsage(ctx context.Context) error {
+// Archive flushes buffered minute aggregations to PostgreSQL
+func (ut *UsageTracker) Archive(ctx context.Context) error {
 	pattern := "usage:*"
 	iter := ut.redis.Scan(ctx, 0, pattern, 100).Iterator()
 
@@ -111,21 +77,4 @@ func (ut *UsageTracker) flushAggregatedUsage(ctx context.Context) error {
 	}
 
 	return iter.Err()
-}
-
-// Shutdown gracefully shuts down the usage tracker
-func (ut *UsageTracker) Shutdown(ctx context.Context) error {
-	// Wait for workers to finish with timeout
-	done := make(chan struct{})
-	go func() {
-		ut.wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("usage tracker shutdown timeout")
-	}
 }

@@ -104,26 +104,26 @@ func ExampleCustomKeyExtractor() {
 }
 
 // ExampleGracefulShutdown shows how to properly shutdown the Redis adapter
-func ExampleGracefulShutdown() {
-	var rdb RedisClient     // Your Redis client
-	var db *dbsqlc.Queries  // Your database queries
-	var logger *slog.Logger // Your logger
+// func ExampleGracefulShutdown() {
+// 	var rdb RedisClient     // Your Redis client
+// 	var db *dbsqlc.Queries  // Your database queries
+// 	var logger *slog.Logger // Your logger
 
-	// Create adapter directly for shutdown control (service "main")
-	adapter := NewRedis(rdb, db, "main", logger)
+// 	// Create adapter directly for shutdown control (service "main")
+// 	adapter := NewKeyValue(rdb, db, "main", logger)
 
-	// ... use adapter ...
+// 	// ... use adapter ...
 
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+// 	// Graceful shutdown with timeout
+// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// 	defer cancel()
 
-	if err := adapter.Shutdown(ctx); err != nil {
-		logger.Error("Failed to shutdown Redis adapter gracefully", "error", err)
-	} else {
-		logger.Info("Redis adapter shutdown completed successfully")
-	}
-}
+// 	// if err := adapter.Shutdown(ctx); err != nil {
+// 	// 	logger.Error("Failed to shutdown Redis adapter gracefully", "error", err)
+// 	// } else {
+// 	// 	logger.Info("Redis adapter shutdown completed successfully")
+// 	// }
+// }
 
 // ExampleMultiService shows how to set up multiple services
 func ExampleMultiService() {
@@ -132,9 +132,9 @@ func ExampleMultiService() {
 	var logger *slog.Logger // Your logger
 
 	// Create separate adapters for different services
-	mainAdapter := NewRedis(rdb, db, "main", logger)
-	premiumAdapter := NewRedis(rdb, db, "premium", logger)
-	apiAdapter := NewRedis(rdb, db, "api", logger)
+	mainAdapter := NewKeyValue(rdb, db, "main", logger)
+	premiumAdapter := NewKeyValue(rdb, db, "premium", logger)
+	apiAdapter := NewKeyValue(rdb, db, "api", logger)
 
 	// Each adapter manages quotas independently for their service
 	keyExtractor := func(r *http.Request) string {
