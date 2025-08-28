@@ -3,6 +3,8 @@ package adapter
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"httpcache/pkg/dbsqlc"
 	"httpcache/pkg/tollgate"
@@ -25,31 +27,43 @@ func NewPostgres(db dbsqlc.DBTX, serviceName string) tollgate.Adapter {
 // Reserve reserves a given amount of quota for a key.
 // Returns true if the reservation was successful, false if the quota is insufficient.
 func (p *Postgres) Reserve(ctx context.Context, key string, amount int) (bool, error) {
-	// For now, we consume the quota upfront (actual reservation logic needs implementation)
-	balance, err := p.queries.ConsumeQuotaByKeyString(ctx, key)
+	// Use the new ReserveQuota query to atomically check and reserve quota
+	result, err := p.queries.ReserveQuota(ctx, &dbsqlc.ReserveQuotaParams{
+		KeyString:      key,
+		Name:           p.serviceName,
+		RemainingQuota: int32(amount),
+	})
+
 	if err != nil {
+		// If no rows were affected, it means insufficient quota
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
 		return false, err
 	}
-	// Return true if we have sufficient balance (simplified logic)
-	return int(balance) >= amount, nil
+
+	// Successfully reserved quota - result contains the remaining quota after reservation
+	return result.RemainingQuota >= 0, nil
 }
 
 // Refund refunds a given amount of quota for a key.
 // Returns true if the refund was successful, false if the quota is insufficient.
 func (p *Postgres) Refund(ctx context.Context, key string, amount int) (bool, error) {
-	// TODO: Implement proper quota refunding mechanism in database
-	// For now, always return true as refunding mechanism needs to be implemented
-	_, err := p.queries.GetBalanceByName(ctx, &dbsqlc.GetBalanceByNameParams{
-		KeyString: key,
-		Name:      p.serviceName,
+	// Use the new RefundQuota query to atomically refund quota
+	result, err := p.queries.RefundQuota(ctx, &dbsqlc.RefundQuotaParams{
+		KeyString:      key,
+		Name:           p.serviceName,
+		RemainingQuota: int32(amount),
 	})
+
 	if err != nil {
+		// If no rows were affected, it means the key/service combination doesn't exist
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
 		return false, err
 	}
-	return true, nil
-}
 
-// ServiceID returns the service ID this adapter is configured for
-func (p *Postgres) ServiceID() string {
-	return p.serviceName
+	// Successfully refunded quota - result contains the remaining quota after refund
+	return result.RemainingQuota <= result.InitialQuota, nil
 }

@@ -152,15 +152,15 @@ func (c *RealMetaStore) GetQuota(ctx context.Context, serviceName string, keyStr
 	// Cache miss or error, load from DB using singleflight
 	sfKey := fmt.Sprintf("quota_db:%s:%s", serviceName, keyString)
 	result, err, _ := c.sf.Do(sfKey, func() (interface{}, error) {
-		return c.db.GetBalanceByName(ctx, &dbsqlc.GetBalanceByNameParams{
+		return c.db.GetQuota(ctx, &dbsqlc.GetQuotaParams{
 			KeyString: keyString,
 			Name:      serviceName,
 		})
 	})
 	if err != nil {
-		return 0, fmt.Errorf("GetBalanceByName: %w", err)
+		return 0, fmt.Errorf("GetQuota: %w", err)
 	}
-	res := result.(*dbsqlc.GetBalanceByNameRow)
+	res := result.(*dbsqlc.GetQuotaRow)
 
 	quota := int(res.RemainingQuota)
 

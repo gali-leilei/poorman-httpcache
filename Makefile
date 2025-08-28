@@ -16,8 +16,12 @@ build: codegen
 test:
 	go test ./...
 
-lint:
+# keep the code tidy
+lint: codegen
+	go mod tidy
 	golangci-lint run
+	# errcheck ./...
+	# staticcheck ./...
 
 dev: build
 	set -o allexport && source .env && ./internalcache

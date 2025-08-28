@@ -1,6 +1,8 @@
+-- Enhanced reserve.lua with sync index tracking
 -- All keys must be explicitly provided for Redis clustering compatibility
 local quotaKey = KEYS[1]    -- Pre-constructed "quota:{apikey}:{service}" key
 local metricKey = KEYS[2]   -- Pre-constructed usage "usage:{apikey}:{service}"
+local syncIndexKey = KEYS[3] -- Pre-constructed "sync:pending:{timestamp}" key
 local hasQuota = ARGV[1] == "true" -- whether this key has quota
 local amount = tonumber(ARGV[2])  -- Amount to reserve
 
@@ -33,5 +35,11 @@ end
 local usageKey = metricKey .. ":" .. timestamp
 redis.call('INCRBY', usageKey, amount)
 redis.call('EXPIRE', usageKey, 2*60*60) -- 2 hour TTL
+
+-- Add to sync index for efficient scanning
+-- Extract apikey:service from metricKey (remove "usage:" prefix)
+local apikeySvc = string.sub(metricKey, 7) -- Remove "usage:" (6 chars + 1)
+redis.call('SADD', syncIndexKey, apikeySvc)
+redis.call('EXPIRE', syncIndexKey, 3*60*60) -- 3 hour TTL (longer than usage data)
 
 return {remaining, 'OK'}

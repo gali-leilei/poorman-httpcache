@@ -43,7 +43,7 @@ FROM api_key_service_quotas aksq
 WHERE aksq.api_key_id = $1 and aksq.service_id = $2;
 
 -- Get balance (remaining quota) for an API key by key_string and service_id
--- name: GetBalanceByName :one
+-- name: GetQuota :one
 SELECT aksq.initial_quota, aksq.remaining_quota
 FROM api_key_service_quotas aksq
 JOIN services s ON aksq.service_id = s.id
@@ -51,20 +51,36 @@ JOIN api_keys ak ON aksq.api_key_id = ak.id
 WHERE ak.key_string = $1 and s.name = $2;
 
 
--- Consume quota for an API key by key_string (decreases by 1 unit)
--- name: ConsumeQuotaByKeyString :one
-WITH updated AS (
-    UPDATE api_key_service_quotas
-    SET remaining_quota = remaining_quota - 1,
-        updated_at = NOW()
-    FROM api_keys ak
-    WHERE api_key_service_quotas.api_key_id = ak.id
-      AND ak.key_string = $1
-      AND ak.status = 'assigned'
-      AND api_key_service_quotas.remaining_quota > 0
-    RETURNING api_key_service_quotas.api_key_id, api_key_service_quotas.remaining_quota
+-- Reserve $amount quota for ($api_key, $service_name) by  (decreases by $amount unit)
+-- name: ReserveQuota :one
+WITH quota_check AS (
+    SELECT aksq.id, aksq.remaining_quota, aksq.api_key_id, aksq.service_id
+    FROM api_key_service_quotas aksq
+    JOIN services s ON aksq.service_id = s.id
+    JOIN api_keys ak ON aksq.api_key_id = ak.id
+    WHERE ak.key_string = $1 AND s.name = $2 AND ak.status = 'assigned'
 )
-SELECT COALESCE(SUM(aksq.remaining_quota), 0)::INT as total_balance
-FROM api_key_service_quotas aksq
-JOIN api_keys ak ON aksq.api_key_id = ak.id
-WHERE ak.key_string = $1 AND ak.status = 'assigned';
+UPDATE api_key_service_quotas
+SET remaining_quota = api_key_service_quotas.remaining_quota - $3,
+    updated_at = NOW()
+FROM quota_check qc
+WHERE api_key_service_quotas.id = qc.id
+    AND qc.remaining_quota >= $3
+RETURNING api_key_service_quotas.remaining_quota, api_key_service_quotas.initial_quota;
+
+-- Refund $amount quota for ($api_key, $service_name) by (increases by $amount unit)
+-- name: RefundQuota :one
+WITH quota_update AS (
+    SELECT aksq.id, aksq.remaining_quota, aksq.initial_quota
+    FROM api_key_service_quotas aksq
+    JOIN services s ON aksq.service_id = s.id
+    JOIN api_keys ak ON aksq.api_key_id = ak.id
+    WHERE ak.key_string = $1 AND s.name = $2 AND ak.status = 'assigned'
+)
+UPDATE api_key_service_quotas
+SET remaining_quota = LEAST(api_key_service_quotas.remaining_quota + $3, qu.initial_quota),
+    updated_at = NOW()
+FROM quota_update qu
+WHERE api_key_service_quotas.id = qu.id
+RETURNING api_key_service_quotas.remaining_quota, api_key_service_quotas.initial_quota;
+

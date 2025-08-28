@@ -17,32 +17,6 @@ type BatchInitializeKeyQuotasParams struct {
 	InitialQuota int32
 }
 
-const consumeQuotaByKeyString = `-- name: ConsumeQuotaByKeyString :one
-WITH updated AS (
-    UPDATE api_key_service_quotas
-    SET remaining_quota = remaining_quota - 1,
-        updated_at = NOW()
-    FROM api_keys ak
-    WHERE api_key_service_quotas.api_key_id = ak.id
-      AND ak.key_string = $1
-      AND ak.status = 'assigned'
-      AND api_key_service_quotas.remaining_quota > 0
-    RETURNING api_key_service_quotas.api_key_id, api_key_service_quotas.remaining_quota
-)
-SELECT COALESCE(SUM(aksq.remaining_quota), 0)::INT as total_balance
-FROM api_key_service_quotas aksq
-JOIN api_keys ak ON aksq.api_key_id = ak.id
-WHERE ak.key_string = $1 AND ak.status = 'assigned'
-`
-
-// Consume quota for an API key by key_string (decreases by 1 unit)
-func (q *Queries) ConsumeQuotaByKeyString(ctx context.Context, keyString string) (int32, error) {
-	row := q.db.QueryRow(ctx, consumeQuotaByKeyString, keyString)
-	var total_balance int32
-	err := row.Scan(&total_balance)
-	return total_balance, err
-}
-
 const getAPIKeyQuotas = `-- name: GetAPIKeyQuotas :many
 SELECT aksq.id, aksq.api_key_id, aksq.service_id, aksq.initial_quota, aksq.remaining_quota, aksq.created_at, aksq.updated_at, s.name as service_name
 FROM api_key_service_quotas aksq
@@ -115,7 +89,7 @@ func (q *Queries) GetBalanceByID(ctx context.Context, arg *GetBalanceByIDParams)
 	return &i, err
 }
 
-const getBalanceByName = `-- name: GetBalanceByName :one
+const getQuota = `-- name: GetQuota :one
 SELECT aksq.initial_quota, aksq.remaining_quota
 FROM api_key_service_quotas aksq
 JOIN services s ON aksq.service_id = s.id
@@ -123,20 +97,20 @@ JOIN api_keys ak ON aksq.api_key_id = ak.id
 WHERE ak.key_string = $1 and s.name = $2
 `
 
-type GetBalanceByNameParams struct {
+type GetQuotaParams struct {
 	KeyString string
 	Name      string
 }
 
-type GetBalanceByNameRow struct {
+type GetQuotaRow struct {
 	InitialQuota   int32
 	RemainingQuota int32
 }
 
 // Get balance (remaining quota) for an API key by key_string and service_id
-func (q *Queries) GetBalanceByName(ctx context.Context, arg *GetBalanceByNameParams) (*GetBalanceByNameRow, error) {
-	row := q.db.QueryRow(ctx, getBalanceByName, arg.KeyString, arg.Name)
-	var i GetBalanceByNameRow
+func (q *Queries) GetQuota(ctx context.Context, arg *GetQuotaParams) (*GetQuotaRow, error) {
+	row := q.db.QueryRow(ctx, getQuota, arg.KeyString, arg.Name)
+	var i GetQuotaRow
 	err := row.Scan(&i.InitialQuota, &i.RemainingQuota)
 	return &i, err
 }
@@ -172,5 +146,76 @@ func (q *Queries) InitializeKeyServiceQuota(ctx context.Context, arg *Initialize
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return &i, err
+}
+
+const refundQuota = `-- name: RefundQuota :one
+WITH quota_update AS (
+    SELECT aksq.id, aksq.remaining_quota, aksq.initial_quota
+    FROM api_key_service_quotas aksq
+    JOIN services s ON aksq.service_id = s.id
+    JOIN api_keys ak ON aksq.api_key_id = ak.id
+    WHERE ak.key_string = $1 AND s.name = $2 AND ak.status = 'assigned'
+)
+UPDATE api_key_service_quotas
+SET remaining_quota = LEAST(api_key_service_quotas.remaining_quota + $3, qu.initial_quota),
+    updated_at = NOW()
+FROM quota_update qu
+WHERE api_key_service_quotas.id = qu.id
+RETURNING api_key_service_quotas.remaining_quota, api_key_service_quotas.initial_quota
+`
+
+type RefundQuotaParams struct {
+	KeyString      string
+	Name           string
+	RemainingQuota int32
+}
+
+type RefundQuotaRow struct {
+	RemainingQuota int32
+	InitialQuota   int32
+}
+
+// Refund $amount quota for ($api_key, $service_name) by (increases by $amount unit)
+func (q *Queries) RefundQuota(ctx context.Context, arg *RefundQuotaParams) (*RefundQuotaRow, error) {
+	row := q.db.QueryRow(ctx, refundQuota, arg.KeyString, arg.Name, arg.RemainingQuota)
+	var i RefundQuotaRow
+	err := row.Scan(&i.RemainingQuota, &i.InitialQuota)
+	return &i, err
+}
+
+const reserveQuota = `-- name: ReserveQuota :one
+WITH quota_check AS (
+    SELECT aksq.id, aksq.remaining_quota, aksq.api_key_id, aksq.service_id
+    FROM api_key_service_quotas aksq
+    JOIN services s ON aksq.service_id = s.id
+    JOIN api_keys ak ON aksq.api_key_id = ak.id
+    WHERE ak.key_string = $1 AND s.name = $2 AND ak.status = 'assigned'
+)
+UPDATE api_key_service_quotas
+SET remaining_quota = api_key_service_quotas.remaining_quota - $3,
+    updated_at = NOW()
+FROM quota_check qc
+WHERE api_key_service_quotas.id = qc.id
+    AND qc.remaining_quota >= $3
+RETURNING api_key_service_quotas.remaining_quota, api_key_service_quotas.initial_quota
+`
+
+type ReserveQuotaParams struct {
+	KeyString      string
+	Name           string
+	RemainingQuota int32
+}
+
+type ReserveQuotaRow struct {
+	RemainingQuota int32
+	InitialQuota   int32
+}
+
+// Reserve $amount quota for ($api_key, $service_name) by  (decreases by $amount unit)
+func (q *Queries) ReserveQuota(ctx context.Context, arg *ReserveQuotaParams) (*ReserveQuotaRow, error) {
+	row := q.db.QueryRow(ctx, reserveQuota, arg.KeyString, arg.Name, arg.RemainingQuota)
+	var i ReserveQuotaRow
+	err := row.Scan(&i.RemainingQuota, &i.InitialQuota)
 	return &i, err
 }
