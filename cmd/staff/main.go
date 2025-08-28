@@ -93,31 +93,34 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 			}
 
 			// Look up user by email
-			user, err := queries.GetUserByEmail(ctx, email)
-			if err != nil {
-				logger.Error("Failed to get user by email", "email", email, "error", err)
-				data := FormData{Email: email, Error: "User not found. Please contact support."}
-				tmpl.Execute(w, data)
-				return
-			}
+			// user, err := queries.GetUserByEmail(ctx, email)
+			// if err != nil {
+			// 	logger.Error("Failed to get user by email", "email", email, "error", err)
+			// 	data := FormData{Email: email, Error: "User not found. Please contact support."}
+			// 	tmpl.Execute(w, data)
+			// 	return
+			// }
 
-			// Get assigned API keys for the user
-			apiKeys, err := queries.GetAssignedAPIKeysByUserID(ctx, user.ID)
-			if err != nil {
-				logger.Error("Failed to get API keys for user", "user_id", user.ID, "error", err)
-				data := FormData{Email: email, Error: "Failed to retrieve API keys. Please contact support."}
-				tmpl.Execute(w, data)
-				return
-			}
+			// // Get assigned API keys for the user
+			// apiKeys, err := queries.GetAssignedAPIKeysByUserID(ctx, user.ID)
+			// if err != nil {
+			// 	logger.Error("Failed to get API keys for user", "user_id", user.ID, "error", err)
+			// 	data := FormData{Email: email, Error: "Failed to retrieve API keys. Please contact support."}
+			// 	tmpl.Execute(w, data)
+			// 	return
+			// }
 
-			if len(apiKeys) == 0 {
-				data := FormData{Email: email, Error: "No API keys found for this user. Please contact support."}
-				tmpl.Execute(w, data)
-				return
-			}
+			// if len(apiKeys) == 0 {
+			// 	data := FormData{Email: email, Error: "No API keys found for this user. Please contact support."}
+			// 	tmpl.Execute(w, data)
+			// 	return
+			// }
 
-			// Use the first assigned API key
-			apiKey := apiKeys[0].KeyString
+			// // Use the first assigned API key
+			// apiKey := apiKeys[0].KeyString
+
+			// for cachev1, use the internal key
+			apiKey := cfg.InternalKey
 
 			// Send email with API key using resend
 			emailBody := fmt.Sprintf(`
