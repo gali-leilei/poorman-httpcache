@@ -42,6 +42,7 @@ type Config struct {
 	PostgresDB       string
 	// resend
 	ResendAPIKey string `env:"RESEND_API_KEY"`
+	EmailDomain  string `env:"EMAIL_DOMAIN"`
 }
 
 // GetConfig parses the environment variables and hydrates the Config struct.

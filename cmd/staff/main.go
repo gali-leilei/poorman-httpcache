@@ -129,7 +129,7 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 			`, apiKey)
 
 			params := &resend.SendEmailRequest{
-				From:    "API Keys <noreply@miromdind.online>",
+				From:    fmt.Sprintf("API Keys <%s>", cfg.EmailDomain),
 				To:      []string{email},
 				Html:    emailBody,
 				Subject: "Your API Key",
