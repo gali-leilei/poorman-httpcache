@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html/template"
@@ -48,6 +49,31 @@ const formHTML = `
 </html>
 `
 
+// HTML template for the email body
+const emailHTML = `
+<h2>Your API Key</h2>
+<p>Hello,</p>
+<p>Your API key is: <strong>{{.APIKey}}</strong></p>
+<p>Please keep this key secure and do not share it with others.</p>
+
+<h3>Usage Examples</h3>
+<p>Use your API key to access our cached proxy services:</p>
+
+<h4>Jina AI Service (use Authorization header):</h4>
+<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
+curl -X POST "https://cachev1.{{.EmailDomain}}/jina/https://www.example.com" \
+  -H "Authorization: Bearer {{.APIKey}}"</pre>
+
+<h4>Google Serper Service (use X-API-KEY header):</h4>
+<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
+curl -X POST "https://cachev1.{{.EmailDomain}}/serper/search" \
+  -H "X-API-KEY: {{.APIKey}}" \
+  -H "Content-Type: application/json" \
+  -d '{"q": "your search query"}'</pre>
+
+<p>Best regards,<br>The Team</p>
+`
+
 func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	// Create a single HTTP server with path-based routing
 	mux := chi.NewRouter()
@@ -64,10 +90,15 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	// Create resend client
 	resendClient := resend.NewClient(cfg.ResendAPIKey)
 
-	// Parse template
-	tmpl, err := template.New("form").Parse(formHTML)
+	// Parse templates
+	formTmpl, err := template.New("form").Parse(formHTML)
 	if err != nil {
-		return fmt.Errorf("template.Parse: %w", err)
+		return fmt.Errorf("form template.Parse: %w", err)
+	}
+
+	emailTmpl, err := template.New("email").Parse(emailHTML)
+	if err != nil {
+		return fmt.Errorf("email template.Parse: %w", err)
 	}
 
 	mux.HandleFunc("/request", func(w http.ResponseWriter, r *http.Request) {
@@ -81,14 +112,20 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 		case "GET":
 			// Display the form
 			data := FormData{}
-			tmpl.Execute(w, data)
+			err := formTmpl.Execute(w, data)
+			if err != nil {
+				logger.Error("Failed to execute form template", "error", err)
+			}
 
 		case "POST":
 			// Handle form submission
 			email := r.FormValue("email")
 			if email == "" {
 				data := FormData{Error: "Email is required"}
-				tmpl.Execute(w, data)
+				err := formTmpl.Execute(w, data)
+				if err != nil {
+					logger.Error("Failed to execute form template", "error", err)
+				}
 				return
 			}
 
@@ -119,33 +156,42 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 			// // Use the first assigned API key
 			// apiKey := apiKeys[0].KeyString
 
-			// for cachev1, use the internal key
+			// for cachev1, use the internal key, but we still check for user email
+			// Look up user by email
+			_, err := queries.GetUserByEmail(ctx, email)
+			if err != nil {
+				logger.Error("Failed to get user by email", "email", email, "error", err)
+				data := FormData{Email: email, Error: "User not found. Please contact support."}
+				err = formTmpl.Execute(w, data)
+				if err != nil {
+					logger.Error("Failed to execute form template", "error", err)
+				}
+				return
+			}
 			apiKey := cfg.InternalKey
 
-			// Send email with API key using resend
-			emailBody := fmt.Sprintf(`
-				<h2>Your API Key</h2>
-				<p>Hello,</p>
-				<p>Your API key is: <strong>%s</strong></p>
-				<p>Please keep this key secure and do not share it with others.</p>
-				
-				<h3>Usage Examples</h3>
-				<p>Use your API key to access our cached proxy services:</p>
-				
-				<h4>Jina AI Service (use Authorization header):</h4>
-				<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%%;">
-curl -X POST "https://cachev1.%s/jina/https://www.example.com" \
-  -H "Authorization: Bearer %s"</pre>
-				
-				<h4>Google Serper Service (use X-API-KEY header):</h4>
-				<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%%;">
-curl -X POST "https://cachev1.%s/serper/search" \
-  -H "X-API-KEY: %s" \
-  -H "Content-Type: application/json" \
-  -d '{"q": "your search query"}'</pre>
-				
-				<p>Best regards,<br>The Team</p>
-			`, apiKey, cfg.EmailDomain, apiKey, cfg.EmailDomain, apiKey)
+			// Generate email body using template
+			type EmailData struct {
+				APIKey      string
+				EmailDomain string
+			}
+
+			emailData := EmailData{
+				APIKey:      apiKey,
+				EmailDomain: cfg.EmailDomain,
+			}
+
+			var emailBodyBuffer bytes.Buffer
+			if err := emailTmpl.Execute(&emailBodyBuffer, emailData); err != nil {
+				logger.Error("Failed to execute email template", "error", err)
+				data := FormData{Email: email, Error: "Failed to generate email. Please try again later."}
+				err = formTmpl.Execute(w, data)
+				if err != nil {
+					logger.Error("Failed to execute form template", "error", err)
+				}
+				return
+			}
+			emailBody := emailBodyBuffer.String()
 
 			params := &resend.SendEmailRequest{
 				From:    fmt.Sprintf("API Keys <noreply@%s>", cfg.EmailDomain),
@@ -158,13 +204,19 @@ curl -X POST "https://cachev1.%s/serper/search" \
 			if err != nil {
 				logger.Error("Failed to send email", "email", email, "error", err)
 				data := FormData{Email: email, Error: "Failed to send email. Please try again later."}
-				tmpl.Execute(w, data)
+				err = formTmpl.Execute(w, data)
+				if err != nil {
+					logger.Error("Failed to execute form template", "error", err)
+				}
 				return
 			}
 
 			logger.Info("API key email sent successfully", "email", email, "message_id", sent.Id)
 			data := FormData{Success: "API key has been sent to your email address."}
-			tmpl.Execute(w, data)
+			err = formTmpl.Execute(w, data)
+			if err != nil {
+				logger.Error("Failed to execute form template", "error", err)
+			}
 		}
 	})
 

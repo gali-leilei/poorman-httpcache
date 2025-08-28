@@ -4,7 +4,9 @@ go 1.24.6
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
+	github.com/go-chi/chi v1.5.5
 	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/httplog/v3 v3.2.2
 	github.com/go-redis/cache/v9 v9.0.0
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/oapi-codegen/runtime v1.1.2
@@ -26,8 +28,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/getkin/kin-openapi v0.132.0 // indirect
-	github.com/go-chi/chi v1.5.5 // indirect
-	github.com/go-chi/httplog/v3 v3.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
