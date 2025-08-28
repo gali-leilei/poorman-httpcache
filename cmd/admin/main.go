@@ -15,29 +15,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/caarlos0/env/v11"
 )
 
-type Config struct {
-	// general
-	Port     int    `env:"PORT" envDefault:"8080"`
-	LogLevel string `env:"LOG_LEVEL" envDefault:"debug"`
-	// redis
-	// RedisServer   string `env:"REDIS_SERVER" envDefault:"localhost:6379"`
-	// RedisUsername string `env:"REDIS_USERNAME" envDefault:""`
-	// RedisPassword string `env:"REDIS_PASSWORD" envDefault:""`
-	// serper
-	// SerperAPIKey string `env:"SERPER_API_KEY"`
-	// jina
-	// JinaAPIKey string `env:"JINA_API_KEY"`
-	// admin
-	AdminKey string `env:"ADMIN_KEY"`
-	// Postgres
-	PostgresURL string `env:"POSTGRES_URL"`
-}
-
-func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
+func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	// Create a single HTTP server with path-based routing
 	mux := chi.NewRouter()
 
@@ -98,7 +78,7 @@ func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 
 func main() {
 	// parse with generics
-	cfg, err := env.ParseAs[Config]()
+	cfg, err := pkg.GetConfig()
 	if err != nil {
 		// Can't use logger here since it hasn't been created yet
 		slog.Error("Failed to parse config", "error", err)

@@ -83,10 +83,10 @@ func (ra *RedisAdapter) Release(ctx context.Context, key uint64) {
 }
 
 // NewRedisAdapter initializes Redis adapter
-func NewRedisAdapter(opt *redis.RingOptions) *RedisAdapter {
-	ring := redis.NewRing(opt)
+func NewRedisAdapter(opt *redis.ClusterOptions) *RedisAdapter {
+	cluster := redis.NewClusterClient(opt)
 	store := cache.New(&cache.Options{
-		Redis: ring,
+		Redis: cluster,
 		Marshal: func(v any) ([]byte, error) {
 			return msgpack.Marshal(v)
 		},

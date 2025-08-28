@@ -17,30 +17,13 @@ import (
 	"syscall"
 	"time"
 
-	env "github.com/caarlos0/env/v11"
 	"github.com/redis/go-redis/v9"
 )
 
-type Config struct {
-	// general
-	Port     int    `env:"PORT" envDefault:"8080"`
-	LogLevel string `env:"LOG_LEVEL" envDefault:"debug"`
-	// redis
-	RedisServer   string `env:"REDIS_SERVER" envDefault:"localhost:6379"`
-	RedisUsername string `env:"REDIS_USERNAME" envDefault:""`
-	RedisPassword string `env:"REDIS_PASSWORD" envDefault:""`
-	// serper
-	SerperAPIKey string `env:"SERPER_API_KEY"`
-	// jina
-	JinaAPIKey string `env:"JINA_API_KEY"`
-	// internal use, single key only
-	InternalKey string `env:"INTERNAL_KEY"`
-}
-
-func NewCache(cfg Config, logger *slog.Logger) (*cache.Cache, error) {
+func NewCache(cfg pkg.Config, logger *slog.Logger) (*cache.Cache, error) {
 	cache, err := cache.New(
-		cache.WithAdapter(cache.NewRedisAdapter(&redis.RingOptions{
-			Addrs:    map[string]string{"server0": cfg.RedisServer},
+		cache.WithAdapter(cache.NewRedisAdapter(&redis.ClusterOptions{
+			Addrs:    []string{cfg.RedisHost},
 			Username: cfg.RedisUsername,
 			Password: cfg.RedisPassword,
 		})),
@@ -57,7 +40,7 @@ func NewCache(cfg Config, logger *slog.Logger) (*cache.Cache, error) {
 	return cache, nil
 }
 
-func NewJinaProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.Handler, error) {
+func NewJinaProxy(cache *cache.Cache, cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 	rp, err := proxy.New(
 		proxy.WithRewrites(
 			proxy.RewriteJinaPath("https://r.jina.ai"),
@@ -70,15 +53,16 @@ func NewJinaProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.Han
 		return nil, err
 	}
 
-	tollgate := tollgate.New(adapter.NewSecretKey(cfg.InternalKey, "jina"), func(r *http.Request) string {
-		// jina key is Authorization: Bearer <key>
+	skAdapter := adapter.NewSecretKey(cfg.InternalKey, "jina")
+	secretKeyExtract := func(r *http.Request) string {
 		return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	})
+	}
+	tollgate := tollgate.New(skAdapter, secretKeyExtract)
 
 	return tollgate.HTTPHandlerMiddleware(cache.HTTPHandlerMiddleware(rp)), nil
 }
 
-func NewSerperProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.Handler, error) {
+func NewSerperProxy(cache *cache.Cache, cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 	rp, err := proxy.New(
 		proxy.WithRewrites(
 			proxy.RewriteSerperPath("https://google.serper.dev"),
@@ -90,15 +74,16 @@ func NewSerperProxy(cache *cache.Cache, cfg Config, logger *slog.Logger) (http.H
 		logger.Error("Failed to create Serper proxy", "error", err)
 		return nil, err
 	}
-	tollgate := tollgate.New(adapter.NewSecretKey(cfg.InternalKey, "serper"), func(r *http.Request) string {
-		// serper key is X-API-KEY: <key>
+	skAdapter := adapter.NewSecretKey(cfg.InternalKey, "serper")
+	secretKeyExtract := func(r *http.Request) string {
 		return r.Header.Get("X-API-KEY")
-	})
+	}
+	tollgate := tollgate.New(skAdapter, secretKeyExtract)
 
 	return tollgate.HTTPHandlerMiddleware(cache.HTTPHandlerMiddleware(rp)), nil
 }
 
-func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
+func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	cache, err := NewCache(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("NewCache: %w", err)
@@ -168,7 +153,7 @@ func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 
 func main() {
 	// parse with generics
-	cfg, err := env.ParseAs[Config]()
+	cfg, err := pkg.GetConfig()
 	if err != nil {
 		// Can't use logger here since it hasn't been created yet
 		slog.Error("Failed to parse config", "error", err)

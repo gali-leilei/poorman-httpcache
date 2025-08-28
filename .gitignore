@@ -35,8 +35,7 @@ go.work.sum
 secret/secret.jsonc
 
 # local artifacts
-/httpcache
-/internalcache
+bin/*
 dump.rdb
 save_pid.txt
 trace.log

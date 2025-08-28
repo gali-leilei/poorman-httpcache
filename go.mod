@@ -9,6 +9,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/oapi-codegen/runtime v1.1.2
 	github.com/redis/go-redis/v9 v9.11.0
+	github.com/resend/resend-go/v2 v2.23.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/sync v0.16.0
 )
