@@ -125,11 +125,27 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 				<p>Hello,</p>
 				<p>Your API key is: <strong>%s</strong></p>
 				<p>Please keep this key secure and do not share it with others.</p>
+				
+				<h3>Usage Examples</h3>
+				<p>Use your API key to access our cached proxy services:</p>
+				
+				<h4>Jina AI Service (use Authorization header):</h4>
+				<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%%;">
+curl -X POST "https://cachev1.%s/jina/https://www.example.com" \
+  -H "Authorization: Bearer %s"</pre>
+				
+				<h4>Google Serper Service (use X-API-KEY header):</h4>
+				<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%%;">
+curl -X POST "https://cachev1.%s/serper/search" \
+  -H "X-API-KEY: %s" \
+  -H "Content-Type: application/json" \
+  -d '{"q": "your search query"}'</pre>
+				
 				<p>Best regards,<br>The Team</p>
-			`, apiKey)
+			`, apiKey, cfg.EmailDomain, apiKey, cfg.EmailDomain, apiKey)
 
 			params := &resend.SendEmailRequest{
-				From:    fmt.Sprintf("API Keys <%s>", cfg.EmailDomain),
+				From:    fmt.Sprintf("API Keys <noreply@%s>", cfg.EmailDomain),
 				To:      []string{email},
 				Html:    emailBody,
 				Subject: "Your API Key",
