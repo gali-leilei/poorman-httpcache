@@ -13,8 +13,11 @@ set +o allexport
 
 
 curl --location "http://127.0.0.1:${PORT}/jina/https://www.example.com" \
---header "Authorization: Bearer $JINA_API_KEY"
+--header "Authorization: Bearer $INTERNAL_KEY"
 
-curl --location "https://r.jina.ai/https://www.example.com" \
---header "Authorization: Bearer $JINA_API_KEY"
+curl --location "http://127.0.0.1:${PORT}/jina/https://news.ycombinator.com/news" \
+--header "Authorization: Bearer $INTERNAL_KEY"
+
+curl --location "http://127.0.0.1:${PORT}/jina/https://sans-io.readthedocs.io" \
+--header "Authorization: Bearer $INTERNAL_KEY"
 

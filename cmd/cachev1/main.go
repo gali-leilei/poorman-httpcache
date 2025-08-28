@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"httpcache/pkg"
-	"httpcache/pkg/api"
 	"httpcache/pkg/cache"
 	"httpcache/pkg/proxy"
 	"httpcache/pkg/tollgate"
@@ -17,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -98,25 +99,13 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	}
 
 	// Create a single HTTP server with path-based routing
-	mux := http.NewServeMux()
+	mux := chi.NewRouter()
 
-	// Route /jina/* requests to jinaProxy
-	mux.HandleFunc("/jina/", func(w http.ResponseWriter, r *http.Request) {
-		jinaProxy.ServeHTTP(w, r)
-	})
+	mux.Use(pkg.GetLoggerMiddleware(logger))
+	mux.Use(middleware.Recoverer)
 
-	// Route /serper/* requests to serperProxy
-	mux.HandleFunc("/serper/", func(w http.ResponseWriter, r *http.Request) {
-		serperProxy.ServeHTTP(w, r)
-	})
-
-	// Route /docs to serve index.html directly
-	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, api.SwaggerAsset, "index.html")
-	})
-
-	// Route /docs/* requests to api.SwaggerUI for other files
-	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.FS(api.SwaggerAsset))))
+	mux.Handle("/jina/*", jinaProxy)
+	mux.Handle("/serper/*", serperProxy)
 
 	// Single server listening on port 8080
 	server := &http.Server{
