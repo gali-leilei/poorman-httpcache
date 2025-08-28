@@ -1,5 +1,5 @@
-
-set dotenv-load
+set dotenv-load := true
+set dotenv-path := "{{justfile_directory()}}/.env"
 
 # default recipe to show all recipes
 default:
@@ -41,4 +41,4 @@ deploy binary: (build binary)
 # kill the background process
 [group('deploy')]
 kill binary:
-	kill -9 $$(cat {{justfile_directory()}}/bin/save_pid.txt) && rm {{justfile_directory()}}/bin/save_pid.txt
+	kill -9 $$(cat -p "{{justfile_directory()}}"/bin/save_pid.txt) && rm {{justfile_directory()}}/bin/save_pid.txt

@@ -19,8 +19,7 @@ paths:
       tags:
         - admin
       security:
-        - AdminKey: []
-        - BasicAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: List of users
@@ -47,8 +46,7 @@ paths:
       tags:
         - admin
       security:
-        - AdminKey: []
-        - BasicAuth: []
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -87,8 +85,7 @@ paths:
       tags:
         - admin
       security:
-        - AdminKey: []
-        - BasicAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: List of API keys
@@ -115,8 +112,7 @@ paths:
       tags:
         - admin
       security:
-        - AdminKey: []
-        - BasicAuth: []
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -151,15 +147,11 @@ paths:
 
 components:
   securitySchemes:
-    AdminKey:
+    ApiKeyAuth:
       type: apiKey
       in: header
       name: X-Admin-Key
-      description: Admin API key required for accessing admin endpoints
-    BasicAuth:
-      type: http
-      scheme: basic
-      description: HTTP Basic Authentication with admin username/password
+      description: API key required for accessing admin endpoints
   
   schemas:
     # base types

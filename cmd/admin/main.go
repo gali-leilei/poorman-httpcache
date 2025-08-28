@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 )
@@ -21,27 +22,29 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	// Create a single HTTP server with path-based routing
 	mux := chi.NewRouter()
 
-	// TODO: fix this
+	// A good base middleware stack
+	mux.Use(middleware.RequestID)
+	mux.Use(middleware.RealIP)
+	mux.Use(middleware.Logger)
+	mux.Use(middleware.Recoverer)
 
 	db, err := pgx.Connect(ctx, cfg.PostgresURL)
 	if err != nil {
 		return fmt.Errorf("pgx.Connect: %w", err)
 	}
 
-	adminServer, err := api.NewServer(db, logger)
-	if err != nil {
-		return fmt.Errorf("NewServer: %w", err)
-	}
+	apiServer := api.NewServer(db, logger, cfg.AdminKey)
+	adminHandler := api.HandlerWithOptions(apiServer, api.ChiServerOptions{BaseURL: ""})
+	mux.Handle("/*", adminHandler)
 
-	mux.Handle("/admin", api.Handler(adminServer))
-
-	// Route /docs to serve index.html directly
-	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, api.SwaggerUI, "index.html")
+	// Redirect /docs to /docs/ for proper relative path resolution
+	mux.HandleFunc("GET /docs", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, api.SwaggerAsset, "index.html")
 	})
 
-	// Route /docs/* requests to api.SwaggerUI for other files
-	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.FS(api.SwaggerUI))))
+	// Route /docs/ to serve index.html
+	// Note: strip `/docs` not `/docs/`.
+	mux.Handle("GET /docs/*", http.StripPrefix("/docs", http.FileServer(http.FS(api.SwaggerAsset))))
 
 	// Single server listening on port 8080
 	server := &http.Server{
@@ -81,7 +84,7 @@ func main() {
 	cfg, err := pkg.GetConfig()
 	if err != nil {
 		// Can't use logger here since it hasn't been created yet
-		slog.Error("Failed to parse config", "error", err)
+		slog.Error("Failed to parse config.", "error", err)
 		os.Exit(1)
 	}
 	logger := pkg.GetLogger(cfg.LogLevel)

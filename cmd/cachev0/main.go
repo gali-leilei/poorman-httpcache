@@ -96,11 +96,11 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 
 	// Route /docs to serve index.html directly
 	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, api.SwaggerUI, "index.html")
+		http.ServeFileFS(w, r, api.SwaggerAsset, "index.html")
 	})
 
 	// Route /docs/* requests to api.SwaggerUI for other files
-	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.FS(api.SwaggerUI))))
+	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.FS(api.SwaggerAsset))))
 
 	// Single server listening on port 8080
 	server := &http.Server{
