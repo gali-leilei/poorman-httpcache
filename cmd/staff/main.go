@@ -61,15 +61,15 @@ const emailHTML = `
 
 <h4>Jina AI Service (use Authorization header):</h4>
 <pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
-curl -X POST "https://cachev1.{{.EmailDomain}}/jina/https://www.example.com" \
-  -H "Authorization: Bearer {{.APIKey}}"</pre>
+curl --location "https://cachev1.{{.EmailDomain}}/jina/https://www.example.com" \
+  --header "Authorization: Bearer {{.APIKey}}"</pre>
 
 <h4>Google Serper Service (use X-API-KEY header):</h4>
 <pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
-curl -X POST "https://cachev1.{{.EmailDomain}}/serper/search" \
-  -H "X-API-KEY: {{.APIKey}}" \
-  -H "Content-Type: application/json" \
-  -d '{"q": "your search query"}'</pre>
+curl --location "https://cachev1.{{.EmailDomain}}/serper/search" \
+  --header "X-API-KEY: {{.APIKey}}" \
+  --header "Content-Type: application/json" \
+  --data '{"q": "your search query"}'</pre>
 
 <p>Best regards,<br>The Team</p>
 `
