@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"httpcache/pkg"
-	"httpcache/pkg/api"
 	"httpcache/pkg/cache"
 	"httpcache/pkg/proxy"
 	"log/slog"
@@ -14,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/middleware"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -23,7 +23,7 @@ func NewCache(cfg pkg.Config, logger *slog.Logger) (*cache.Cache, error) {
 			Addrs:    []string{cfg.RedisHost},
 			Username: cfg.RedisUsername,
 			Password: cfg.RedisPassword,
-		})),
+		}, logger)),
 		// cache both GET and PUT methods
 		cache.WithMethods([]string{http.MethodGet, http.MethodPost}),
 		// cache responses for 24 hours
@@ -84,28 +84,21 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	// Create a single HTTP server with path-based routing
 	mux := http.NewServeMux()
 
-	// Route /jina/* requests to jinaProxy
 	mux.HandleFunc("/jina/", func(w http.ResponseWriter, r *http.Request) {
 		jinaProxy.ServeHTTP(w, r)
 	})
-
-	// Route /serper/* requests to serperProxy
 	mux.HandleFunc("/serper/", func(w http.ResponseWriter, r *http.Request) {
 		serperProxy.ServeHTTP(w, r)
 	})
 
-	// Route /docs to serve index.html directly
-	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, api.SwaggerAsset, "index.html")
-	})
-
-	// Route /docs/* requests to api.SwaggerUI for other files
-	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.FS(api.SwaggerAsset))))
+	var h http.Handler = mux
+	h = pkg.GetLoggerMiddleware(logger)(h)
+	h = middleware.Recoverer(h)
 
 	// Single server listening on port 8080
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: mux,
+		Handler: h,
 	}
 
 	// Start the single server

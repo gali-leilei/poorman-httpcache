@@ -16,7 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/redis/go-redis/v9"
 )
@@ -27,7 +26,7 @@ func NewCache(cfg pkg.Config, logger *slog.Logger) (*cache.Cache, error) {
 			Addrs:    []string{cfg.RedisHost},
 			Username: cfg.RedisUsername,
 			Password: cfg.RedisPassword,
-		})),
+		}, logger)),
 		// cache both GET and PUT methods
 		cache.WithMethods([]string{http.MethodGet, http.MethodPost}),
 		// cache responses for 24 hours
@@ -99,18 +98,23 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	}
 
 	// Create a single HTTP server with path-based routing
-	mux := chi.NewRouter()
+	mux := http.NewServeMux()
 
-	mux.Use(pkg.GetLoggerMiddleware(logger))
-	mux.Use(middleware.Recoverer)
+	mux.HandleFunc("/jina/", func(w http.ResponseWriter, r *http.Request) {
+		jinaProxy.ServeHTTP(w, r)
+	})
+	mux.HandleFunc("/serper/", func(w http.ResponseWriter, r *http.Request) {
+		serperProxy.ServeHTTP(w, r)
+	})
 
-	mux.Handle("/jina/*", jinaProxy)
-	mux.Handle("/serper/*", serperProxy)
+	var h http.Handler = mux
+	h = pkg.GetLoggerMiddleware(logger)(h)
+	h = middleware.Recoverer(h)
 
 	// Single server listening on port 8080
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: mux,
+		Handler: h,
 	}
 
 	// Start the single server

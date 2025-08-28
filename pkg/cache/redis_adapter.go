@@ -83,7 +83,7 @@ func (ra *RedisAdapter) Release(ctx context.Context, key uint64) {
 }
 
 // NewRedisAdapter initializes Redis adapter
-func NewRedisAdapter(opt *redis.ClusterOptions) *RedisAdapter {
+func NewRedisAdapter(opt *redis.ClusterOptions, logger *slog.Logger) *RedisAdapter {
 	cluster := redis.NewClusterClient(opt)
 	store := cache.New(&cache.Options{
 		Redis: cluster,
@@ -96,6 +96,7 @@ func NewRedisAdapter(opt *redis.ClusterOptions) *RedisAdapter {
 		LocalCache: cache.NewTinyLFU(1000, 10*time.Minute),
 	})
 	return &RedisAdapter{
-		store: store,
+		store:  store,
+		logger: logger,
 	}
 }
