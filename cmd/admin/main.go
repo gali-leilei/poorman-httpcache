@@ -25,7 +25,7 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	// A good base middleware stack
 	mux.Use(middleware.RequestID)
 	mux.Use(middleware.RealIP)
-	mux.Use(middleware.Logger)
+	mux.Use(pkg.GetLoggerMiddleware(logger))
 	mux.Use(middleware.Recoverer)
 
 	db, err := pgx.Connect(ctx, cfg.PostgresURL)

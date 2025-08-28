@@ -27,6 +27,7 @@ require (
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/getkin/kin-openapi v0.132.0 // indirect
 	github.com/go-chi/chi v1.5.5 // indirect
+	github.com/go-chi/httplog/v3 v3.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
