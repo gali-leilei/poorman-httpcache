@@ -56,20 +56,71 @@ const emailHTML = `
 <p>Your API key is: <strong>{{.APIKey}}</strong></p>
 <p>Please keep this key secure and do not share it with others.</p>
 
-<h3>Usage Examples</h3>
+<h3>Bash Examples</h3>
 <p>Use your API key to access our cached proxy services:</p>
 
-<h4>Jina AI Service (use Authorization header):</h4>
+<h4>Jina AI</h4>
 <pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
 curl --location "https://cachev1.{{.EmailDomain}}/jina/https://www.example.com" \
   --header "Authorization: Bearer {{.APIKey}}"</pre>
 
-<h4>Google Serper Service (use X-API-KEY header):</h4>
+<h4>Serper</h4>
 <pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
 curl --location "https://cachev1.{{.EmailDomain}}/serper/search" \
   --header "X-API-KEY: {{.APIKey}}" \
   --header "Content-Type: application/json" \
   --data '{"q": "your search query"}'</pre>
+
+<h3>Python Example:</h3>
+<p>Here are Python examples for using the endpoints:</p>
+
+<h4>Jina AI</h4>
+<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
+import requests
+
+url = "https://cachev1.{{.EmailDomain}}/jina/https://www.example.com"
+headers = {
+    "Authorization": "Bearer {{.APIKey}}"
+}
+
+response = requests.get(url, headers=headers)
+print(response.json())
+</pre>
+
+<h4>Serper</h4>
+<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
+import requests
+import json
+
+url = "https://cachev1.{{.EmailDomain}}/serper/search"
+headers = {
+    "X-API-KEY": "{{.APIKey}}",
+    "Content-Type": "application/json"
+}
+data = {
+    "q": "your search query"
+}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())
+</pre>
+
+<h4>With Miroflow</h4>
+<p> Coming soon (PR awaiting test and review). Update project .env file or config.yaml file: </p>
+<pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
+// in .env file
+JINA_BASE_URL=https://cachev1.{{.EmailDomain}}/jina/
+JINA_API_KEY={{.APIKey}}
+SERPER_BASE_URL=https://cachev1.{{.EmailDomain}}/serper/
+SERPER_API_KEY={{.APIKey}}
+
+// in config.yaml file
+env:
+	JINA_BASE_URL: https://cachev1.{{.EmailDomain}}/jina/
+	JINA_API_KEY: {{.APIKey}}
+	SERPER_BASE_URL: https://cachev1.{{.EmailDomain}}/serper/
+	SERPER_API_KEY: {{.APIKey}}
+</pre>
 
 <p>Best regards,<br>The Team</p>
 `
