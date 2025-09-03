@@ -52,8 +52,8 @@ func (as *AdminService) CheckUser(ctx context.Context, email string) (*UserInfo,
 		for _, quota := range quotaRecords {
 			serviceQuotas = append(serviceQuotas, &ServiceQuota{
 				ServiceName:    quota.ServiceName,
-				InitialQuota:   quota.InitialQuota,
-				RemainingQuota: quota.RemainingQuota,
+				InitialQuota:   quota.Available + quota.Consumed, // Total quota
+				RemainingQuota: quota.Available,                  // Available quota
 			})
 		}
 

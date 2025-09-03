@@ -8,25 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type ApiKeyServiceQuotas struct {
-	ID             int64
-	ApiKeyID       int64
-	ServiceID      int64
-	InitialQuota   int32
-	RemainingQuota int32
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
-type ApiKeyServiceUsageLogs struct {
-	ID                int64
-	ApiKeyID          int64
-	ServiceID         int64
-	ConsumptionAmount int32
-	MinuteTimestamp   pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-}
-
 type ApiKeyStatusEvents struct {
 	ID        int64
 	ApiKeyID  int64
@@ -47,6 +28,25 @@ type ApiKeys struct {
 	KeyString string
 	Status    string
 	HasQuota  bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type Metrics struct {
+	ID              int64
+	ApiKeyID        int64
+	ServiceID       int64
+	Amount          int32
+	BucketTimestamp pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+}
+
+type Quotas struct {
+	ID        int64
+	ApiKeyID  int64
+	ServiceID int64
+	Available int32
+	Consumed  int32
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
