@@ -67,7 +67,8 @@ func (r iteratorForBatchInitializeKeyQuotas) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].ApiKeyID,
 		r.rows[0].ServiceID,
-		r.rows[0].InitialQuota,
+		r.rows[0].Available,
+		r.rows[0].Consumed,
 	}, nil
 }
 
@@ -77,7 +78,7 @@ func (r iteratorForBatchInitializeKeyQuotas) Err() error {
 
 // Batch initialize quotas for all services for a given API key
 func (q *Queries) BatchInitializeKeyQuotas(ctx context.Context, arg []*BatchInitializeKeyQuotasParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"api_key_service_quotas"}, []string{"api_key_id", "service_id", "initial_quota"}, &iteratorForBatchInitializeKeyQuotas{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"quotas"}, []string{"api_key_id", "service_id", "available", "consumed"}, &iteratorForBatchInitializeKeyQuotas{rows: arg})
 }
 
 // iteratorForBatchInsertUsageLogs implements pgx.CopyFromSource.
@@ -102,8 +103,8 @@ func (r iteratorForBatchInsertUsageLogs) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].ApiKeyID,
 		r.rows[0].ServiceID,
-		r.rows[0].ConsumptionAmount,
-		r.rows[0].MinuteTimestamp,
+		r.rows[0].Amount,
+		r.rows[0].BucketTimestamp,
 		r.rows[0].CreatedAt,
 	}, nil
 }
@@ -114,5 +115,5 @@ func (r iteratorForBatchInsertUsageLogs) Err() error {
 
 // Batch insert usage logs for multiple events
 func (q *Queries) BatchInsertUsageLogs(ctx context.Context, arg []*BatchInsertUsageLogsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"api_key_service_usage_logs"}, []string{"api_key_id", "service_id", "consumption_amount", "minute_timestamp", "created_at"}, &iteratorForBatchInsertUsageLogs{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"metrics"}, []string{"api_key_id", "service_id", "amount", "bucket_timestamp", "created_at"}, &iteratorForBatchInsertUsageLogs{rows: arg})
 }

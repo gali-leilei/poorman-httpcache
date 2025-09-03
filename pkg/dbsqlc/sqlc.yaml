@@ -6,16 +6,16 @@ sql:
       - "services.sql"
       - "api_keys.sql"
       - "api_key_statuses.sql"
-      - "api_key_service_quotas.sql"
-      - "api_key_service_usage_logs.sql"
+      - "quotas.sql"
+      - "metrics.sql"
       - "api_key_status_events.sql"
     schema:
       - "users.sql"
       - "services.sql"
       - "api_keys.sql"
       - "api_key_statuses.sql"
-      - "api_key_service_quotas.sql"
-      - "api_key_service_usage_logs.sql"
+      - "quotas.sql"
+      - "metrics.sql"
       - "api_key_status_events.sql"
     gen:
       go:
