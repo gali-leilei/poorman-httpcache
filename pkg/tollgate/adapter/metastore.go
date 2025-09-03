@@ -152,7 +152,7 @@ func (c *RealMetaStore) GetQuota(ctx context.Context, serviceName string, keyStr
 	// Cache miss or error, load from DB using singleflight
 	sfKey := fmt.Sprintf("quota_db:%s:%s", serviceName, keyString)
 	result, err, _ := c.sf.Do(sfKey, func() (interface{}, error) {
-		return c.db.GetQuota(ctx, &dbsqlc.GetQuotaParams{
+		return c.db.GetQuotaByName(ctx, &dbsqlc.GetQuotaByNameParams{
 			KeyString: keyString,
 			Name:      serviceName,
 		})
@@ -160,9 +160,9 @@ func (c *RealMetaStore) GetQuota(ctx context.Context, serviceName string, keyStr
 	if err != nil {
 		return 0, fmt.Errorf("GetQuota: %w", err)
 	}
-	res := result.(*dbsqlc.GetQuotaRow)
+	res := result.(*dbsqlc.GetQuotaByNameRow)
 
-	quota := int(res.RemainingQuota)
+	quota := int(res.Available)
 
 	// Cache the quota for 5 minutes (shorter than key/service metadata due to frequent changes)
 	quotaJSON, _ := json.Marshal(quota)

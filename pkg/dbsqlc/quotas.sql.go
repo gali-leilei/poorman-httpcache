@@ -11,13 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type BatchInitializeKeyQuotasParams struct {
-	ApiKeyID  int64
-	ServiceID int64
-	Available int32
-	Consumed  int32
-}
-
 const getAPIKeyQuotas = `-- name: GetAPIKeyQuotas :many
 SELECT aksq.id, aksq.api_key_id, aksq.service_id, aksq.available, aksq.consumed, aksq.created_at, aksq.updated_at, s.name as service_name
 FROM quotas aksq
@@ -66,31 +59,31 @@ func (q *Queries) GetAPIKeyQuotas(ctx context.Context, apiKeyID int64) ([]*GetAP
 	return items, nil
 }
 
-const getBalanceByID = `-- name: GetBalanceByID :one
+const getQuotaByID = `-- name: GetQuotaByID :one
 SELECT aksq.consumed, aksq.available
 FROM quotas aksq
 WHERE aksq.api_key_id = $1 and aksq.service_id = $2
 `
 
-type GetBalanceByIDParams struct {
+type GetQuotaByIDParams struct {
 	ApiKeyID  int64
 	ServiceID int64
 }
 
-type GetBalanceByIDRow struct {
+type GetQuotaByIDRow struct {
 	Consumed  int32
 	Available int32
 }
 
-// Get balance (remaining quota) for an API key by key_string and service_id
-func (q *Queries) GetBalanceByID(ctx context.Context, arg *GetBalanceByIDParams) (*GetBalanceByIDRow, error) {
-	row := q.db.QueryRow(ctx, getBalanceByID, arg.ApiKeyID, arg.ServiceID)
-	var i GetBalanceByIDRow
+// Get quota (consumed and available) for ($api_key_id, $service_id)
+func (q *Queries) GetQuotaByID(ctx context.Context, arg *GetQuotaByIDParams) (*GetQuotaByIDRow, error) {
+	row := q.db.QueryRow(ctx, getQuotaByID, arg.ApiKeyID, arg.ServiceID)
+	var i GetQuotaByIDRow
 	err := row.Scan(&i.Consumed, &i.Available)
 	return &i, err
 }
 
-const getQuota = `-- name: GetQuota :one
+const getQuotaByName = `-- name: GetQuotaByName :one
 SELECT aksq.consumed, aksq.available
 FROM quotas aksq
 JOIN services s ON aksq.service_id = s.id
@@ -98,20 +91,20 @@ JOIN api_keys ak ON aksq.api_key_id = ak.id
 WHERE ak.key_string = $1 and s.name = $2
 `
 
-type GetQuotaParams struct {
+type GetQuotaByNameParams struct {
 	KeyString string
 	Name      string
 }
 
-type GetQuotaRow struct {
+type GetQuotaByNameRow struct {
 	Consumed  int32
 	Available int32
 }
 
-// Get balance (remaining quota) for an API key by key_string and service_id
-func (q *Queries) GetQuota(ctx context.Context, arg *GetQuotaParams) (*GetQuotaRow, error) {
-	row := q.db.QueryRow(ctx, getQuota, arg.KeyString, arg.Name)
-	var i GetQuotaRow
+// Get quota (consumed and available) for an ($api_key, $service_name)
+func (q *Queries) GetQuotaByName(ctx context.Context, arg *GetQuotaByNameParams) (*GetQuotaByNameRow, error) {
+	row := q.db.QueryRow(ctx, getQuotaByName, arg.KeyString, arg.Name)
+	var i GetQuotaByNameRow
 	err := row.Scan(&i.Consumed, &i.Available)
 	return &i, err
 }
@@ -177,7 +170,7 @@ type RefundQuotaRow struct {
 	Consumed  int32
 }
 
-// Refund $amount quota for ($api_key, $service_name) by (increases by $amount unit)
+// Refund $amount quota for ($api_key, $service_name)
 func (q *Queries) RefundQuota(ctx context.Context, arg *RefundQuotaParams) (*RefundQuotaRow, error) {
 	row := q.db.QueryRow(ctx, refundQuota, arg.KeyString, arg.Name, arg.Available)
 	var i RefundQuotaRow
@@ -214,7 +207,7 @@ type ReserveQuotaRow struct {
 	Consumed  int32
 }
 
-// Reserve $amount quota for ($api_key, $service_name) by  (decreases by $amount unit)
+// Reserve $amount quota for ($api_key, $service_name)
 func (q *Queries) ReserveQuota(ctx context.Context, arg *ReserveQuotaParams) (*ReserveQuotaRow, error) {
 	row := q.db.QueryRow(ctx, reserveQuota, arg.KeyString, arg.Name, arg.Available)
 	var i ReserveQuotaRow

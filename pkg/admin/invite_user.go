@@ -164,9 +164,9 @@ func (as *AdminService) AddKeyToUser(ctx context.Context, userID int64, apiKey s
 			}
 
 			_, err = qtx.InitializeKeyServiceQuota(ctx, &dbsqlc.InitializeKeyServiceQuotaParams{
-				ApiKeyID:     apiKeyRecord.ID,
-				ServiceID:    service.ID,
-				InitialQuota: serviceDetails.DefaultQuota,
+				ApiKeyID:  apiKeyRecord.ID,
+				ServiceID: service.ID,
+				Available: serviceDetails.DefaultQuota,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to initialize quota for service %s: %w", service.Name, err)
@@ -257,8 +257,8 @@ func (as *AdminService) InviteNewUser(ctx context.Context, email string, isServi
 
 			initialQuotas = append(initialQuotas, &ServiceQuota{
 				ServiceName:    serviceName,
-				InitialQuota:   quota.InitialQuota,
-				RemainingQuota: quota.RemainingQuota,
+				InitialQuota:   quota.Available + quota.Consumed, // Total quota
+				RemainingQuota: quota.Available,                  // Available quota
 			})
 		}
 	}

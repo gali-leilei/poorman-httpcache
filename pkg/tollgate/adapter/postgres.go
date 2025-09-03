@@ -29,9 +29,9 @@ func NewPostgres(db dbsqlc.DBTX, serviceName string) tollgate.Adapter {
 func (p *Postgres) Reserve(ctx context.Context, key string, amount int) (bool, error) {
 	// Use the new ReserveQuota query to atomically check and reserve quota
 	result, err := p.queries.ReserveQuota(ctx, &dbsqlc.ReserveQuotaParams{
-		KeyString:      key,
-		Name:           p.serviceName,
-		RemainingQuota: int32(amount),
+		KeyString: key,
+		Name:      p.serviceName,
+		Available: int32(amount),
 	})
 
 	if err != nil {
@@ -42,18 +42,18 @@ func (p *Postgres) Reserve(ctx context.Context, key string, amount int) (bool, e
 		return false, err
 	}
 
-	// Successfully reserved quota - result contains the remaining quota after reservation
-	return result.RemainingQuota >= 0, nil
+	// Successfully reserved quota - result contains the available quota after reservation
+	return result.Available >= 0, nil
 }
 
 // Refund refunds a given amount of quota for a key.
 // Returns true if the refund was successful, false if the quota is insufficient.
 func (p *Postgres) Refund(ctx context.Context, key string, amount int) (bool, error) {
 	// Use the new RefundQuota query to atomically refund quota
-	result, err := p.queries.RefundQuota(ctx, &dbsqlc.RefundQuotaParams{
-		KeyString:      key,
-		Name:           p.serviceName,
-		RemainingQuota: int32(amount),
+	_, err := p.queries.RefundQuota(ctx, &dbsqlc.RefundQuotaParams{
+		KeyString: key,
+		Name:      p.serviceName,
+		Available: int32(amount),
 	})
 
 	if err != nil {
@@ -64,6 +64,6 @@ func (p *Postgres) Refund(ctx context.Context, key string, amount int) (bool, er
 		return false, err
 	}
 
-	// Successfully refunded quota - result contains the remaining quota after refund
-	return result.RemainingQuota <= result.InitialQuota, nil
+	// Successfully refunded quota - result contains the available quota after refund
+	return true, nil
 }

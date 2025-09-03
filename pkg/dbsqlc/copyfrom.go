@@ -45,42 +45,6 @@ func (q *Queries) BatchCreateAPIKeys(ctx context.Context, arg []*BatchCreateAPIK
 	return q.db.CopyFrom(ctx, []string{"api_keys"}, []string{"user_id", "key_string", "status", "has_quota"}, &iteratorForBatchCreateAPIKeys{rows: arg})
 }
 
-// iteratorForBatchInitializeKeyQuotas implements pgx.CopyFromSource.
-type iteratorForBatchInitializeKeyQuotas struct {
-	rows                 []*BatchInitializeKeyQuotasParams
-	skippedFirstNextCall bool
-}
-
-func (r *iteratorForBatchInitializeKeyQuotas) Next() bool {
-	if len(r.rows) == 0 {
-		return false
-	}
-	if !r.skippedFirstNextCall {
-		r.skippedFirstNextCall = true
-		return true
-	}
-	r.rows = r.rows[1:]
-	return len(r.rows) > 0
-}
-
-func (r iteratorForBatchInitializeKeyQuotas) Values() ([]interface{}, error) {
-	return []interface{}{
-		r.rows[0].ApiKeyID,
-		r.rows[0].ServiceID,
-		r.rows[0].Available,
-		r.rows[0].Consumed,
-	}, nil
-}
-
-func (r iteratorForBatchInitializeKeyQuotas) Err() error {
-	return nil
-}
-
-// Batch initialize quotas for all services for a given API key
-func (q *Queries) BatchInitializeKeyQuotas(ctx context.Context, arg []*BatchInitializeKeyQuotasParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"quotas"}, []string{"api_key_id", "service_id", "available", "consumed"}, &iteratorForBatchInitializeKeyQuotas{rows: arg})
-}
-
 // iteratorForBatchInsertUsageLogs implements pgx.CopyFromSource.
 type iteratorForBatchInsertUsageLogs struct {
 	rows                 []*BatchInsertUsageLogsParams

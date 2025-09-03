@@ -23,10 +23,6 @@ ON CONFLICT (api_key_id, service_id) DO UPDATE SET
     updated_at = NOW()
 RETURNING *;
 
--- Batch initialize quotas for all services for a given API key
--- name: BatchInitializeKeyQuotas :copyfrom
-INSERT INTO quotas (api_key_id, service_id, available, consumed)
-VALUES ($1, $2, $3, $4);
 
 -- Get API key quotas with service info
 -- name: GetAPIKeyQuotas :many
@@ -35,14 +31,14 @@ FROM quotas aksq
 JOIN services s ON aksq.service_id = s.id
 WHERE aksq.api_key_id = $1;
 
--- Get balance (remaining quota) for an API key by key_string and service_id
--- name: GetBalanceByID :one
+-- Get quota (consumed and available) for ($api_key_id, $service_id)
+-- name: GetQuotaByID :one
 SELECT aksq.consumed, aksq.available
 FROM quotas aksq
 WHERE aksq.api_key_id = $1 and aksq.service_id = $2;
 
--- Get balance (remaining quota) for an API key by key_string and service_id
--- name: GetQuota :one
+-- Get quota (consumed and available) for an ($api_key, $service_name)
+-- name: GetQuotaByName :one
 SELECT aksq.consumed, aksq.available
 FROM quotas aksq
 JOIN services s ON aksq.service_id = s.id
@@ -50,7 +46,7 @@ JOIN api_keys ak ON aksq.api_key_id = ak.id
 WHERE ak.key_string = $1 and s.name = $2;
 
 
--- Reserve $amount quota for ($api_key, $service_name) by  (decreases by $amount unit)
+-- Reserve $amount quota for ($api_key, $service_name)
 -- name: ReserveQuota :one
 WITH quota_check AS (
     SELECT aksq.id, aksq.available, aksq.api_key_id, aksq.service_id
@@ -68,7 +64,7 @@ WHERE quotas.id = qc.id
     AND qc.available >= $3
 RETURNING quotas.available, quotas.consumed;
 
--- Refund $amount quota for ($api_key, $service_name) by (increases by $amount unit)
+-- Refund $amount quota for ($api_key, $service_name)
 -- name: RefundQuota :one
 WITH quota_update AS (
     SELECT aksq.id, aksq.available, aksq.consumed

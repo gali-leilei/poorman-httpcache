@@ -57,10 +57,10 @@ func (ut *UsageTracker) Archive(ctx context.Context) error {
 
 		// Upsert to PostgreSQL
 		_, err = ut.db.UpsertMinuteUsage(ctx, &dbsqlc.UpsertMinuteUsageParams{
-			ApiKeyID:          apiKeyID,
-			ServiceID:         serviceID,
-			ConsumptionAmount: int32(count),
-			MinuteTimestamp:   pgtype.Timestamptz{Time: time.Unix(minuteTimestamp, 0), Valid: true},
+			ApiKeyID:        apiKeyID,
+			ServiceID:       serviceID,
+			Amount:          int32(count),
+			BucketTimestamp: pgtype.Timestamptz{Time: time.Unix(minuteTimestamp, 0), Valid: true},
 		})
 
 		if err != nil {
