@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -17,25 +18,46 @@ const (
 	ApiKeyAuthScopes = "ApiKeyAuth.Scopes"
 )
 
+// Defines values for ApiKeyStatus.
+const (
+	Active     ApiKeyStatus = "active"
+	Inactive   ApiKeyStatus = "inactive"
+	Suspended  ApiKeyStatus = "suspended"
+	Unassigned ApiKeyStatus = "unassigned"
+)
+
 // ApiKey defines model for ApiKey.
 type ApiKey struct {
 	CreatedAt time.Time `json:"created_at"`
 	HasQuota  bool      `json:"has_quota"`
 	Id        int64     `json:"id"`
-	KeyString string    `json:"key_string"`
-	Status    string    `json:"status"`
-	UpdatedAt time.Time `json:"updated_at"`
-	UserId    int64     `json:"user_id"`
+
+	// KeyString API key string with sk- prefix
+	KeyString string `json:"key_string"`
+
+	// Status Current status of the API key
+	Status    ApiKeyStatus `json:"status"`
+	UpdatedAt time.Time    `json:"updated_at"`
+	UserId    int64        `json:"user_id"`
 }
 
-// CreateApiKeyRequest defines model for CreateApiKeyRequest.
-type CreateApiKeyRequest struct {
-	Email    openapi_types.Email `json:"email"`
-	HasQuota bool                `json:"has_quota"`
+// ApiKeyStatus Current status of the API key
+type ApiKeyStatus string
+
+// AssociateServiceRequest defines model for AssociateServiceRequest.
+type AssociateServiceRequest struct {
+	// ServiceId The ID of the service to associate with the API key
+	ServiceId int64 `json:"service_id"`
+}
+
+// CreateApiKeyForUserRequest defines model for CreateApiKeyForUserRequest.
+type CreateApiKeyForUserRequest struct {
+	HasQuota bool `json:"has_quota"`
 }
 
 // CreateApiKeyResponse defines model for CreateApiKeyResponse.
 type CreateApiKeyResponse struct {
+	// ApiKey Service API key with svc- prefix
 	ApiKey        string              `json:"api_key"`
 	ServiceQuotas []ServiceQuota      `json:"service_quotas"`
 	UserEmail     openapi_types.Email `json:"user_email"`
@@ -48,7 +70,9 @@ type CreateUserRequest struct {
 
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
-	Code   int      `json:"code"`
+	Code int `json:"code"`
+
+	// Msg Human-readable error message
 	Msg    string   `json:"msg"`
 	Traces []string `json:"traces"`
 }
@@ -58,11 +82,28 @@ type Pong struct {
 	Ping string `json:"ping"`
 }
 
+// Service defines model for Service.
+type Service struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// Description Human-readable service description
+	Description *string `json:"description,omitempty"`
+
+	// Endpoint Service API endpoint URL
+	Endpoint string `json:"endpoint"`
+	Id       int64  `json:"id"`
+
+	// Name Service name identifier
+	Name string `json:"name"`
+}
+
 // ServiceQuota defines model for ServiceQuota.
 type ServiceQuota struct {
-	InitialQuota   int    `json:"initial_quota"`
-	RemainingQuota int    `json:"remaining_quota"`
-	ServiceName    string `json:"service_name"`
+	InitialQuota   int `json:"initial_quota"`
+	RemainingQuota int `json:"remaining_quota"`
+
+	// ServiceName Service identifier name
+	ServiceName string `json:"service_name"`
 }
 
 // User defines model for User.
@@ -72,61 +113,83 @@ type User struct {
 	Id        int64               `json:"id"`
 }
 
-// PostAdminKeysJSONRequestBody defines body for PostAdminKeys for application/json ContentType.
-type PostAdminKeysJSONRequestBody = CreateApiKeyRequest
+// CreateUserApiKeyJSONRequestBody defines body for CreateUserApiKey for application/json ContentType.
+type CreateUserApiKeyJSONRequestBody = CreateApiKeyForUserRequest
 
-// PostAdminUsersJSONRequestBody defines body for PostAdminUsers for application/json ContentType.
-type PostAdminUsersJSONRequestBody = CreateUserRequest
+// AssociateKeyServiceJSONRequestBody defines body for AssociateKeyService for application/json ContentType.
+type AssociateKeyServiceJSONRequestBody = AssociateServiceRequest
+
+// CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
+type CreateUserJSONRequestBody = CreateUserRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// List all API keys
-	// (GET /admin/keys)
-	GetAdminKeys(w http.ResponseWriter, r *http.Request)
-	// Create a new API key
-	// (POST /admin/keys)
-	PostAdminKeys(w http.ResponseWriter, r *http.Request)
+	// List API keys for a specific user
+	// (GET /admin/user/{userId}/keys)
+	ListUserApiKeys(w http.ResponseWriter, r *http.Request, userId int64)
+	// Create a new API key for a specific user
+	// (POST /admin/user/{userId}/keys)
+	CreateUserApiKey(w http.ResponseWriter, r *http.Request, userId int64)
+	// List services associated with a specific API key
+	// (GET /admin/user/{userId}/keys/{keyID}/services)
+	ListKeyServices(w http.ResponseWriter, r *http.Request, userId int64, keyID int64)
+	// Associate a service with a specific API key
+	// (POST /admin/user/{userId}/keys/{keyID}/services)
+	AssociateKeyService(w http.ResponseWriter, r *http.Request, userId int64, keyID int64)
 	// List all users
 	// (GET /admin/users)
-	GetAdminUsers(w http.ResponseWriter, r *http.Request)
+	ListUsers(w http.ResponseWriter, r *http.Request)
 	// Create a new user
 	// (POST /admin/users)
-	PostAdminUsers(w http.ResponseWriter, r *http.Request)
-
+	CreateUser(w http.ResponseWriter, r *http.Request)
+	// Health check endpoint
 	// (GET /ping)
-	GetPing(w http.ResponseWriter, r *http.Request)
+	Ping(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// List all API keys
-// (GET /admin/keys)
-func (_ Unimplemented) GetAdminKeys(w http.ResponseWriter, r *http.Request) {
+// List API keys for a specific user
+// (GET /admin/user/{userId}/keys)
+func (_ Unimplemented) ListUserApiKeys(w http.ResponseWriter, r *http.Request, userId int64) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Create a new API key
-// (POST /admin/keys)
-func (_ Unimplemented) PostAdminKeys(w http.ResponseWriter, r *http.Request) {
+// Create a new API key for a specific user
+// (POST /admin/user/{userId}/keys)
+func (_ Unimplemented) CreateUserApiKey(w http.ResponseWriter, r *http.Request, userId int64) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List services associated with a specific API key
+// (GET /admin/user/{userId}/keys/{keyID}/services)
+func (_ Unimplemented) ListKeyServices(w http.ResponseWriter, r *http.Request, userId int64, keyID int64) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Associate a service with a specific API key
+// (POST /admin/user/{userId}/keys/{keyID}/services)
+func (_ Unimplemented) AssociateKeyService(w http.ResponseWriter, r *http.Request, userId int64, keyID int64) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // List all users
 // (GET /admin/users)
-func (_ Unimplemented) GetAdminUsers(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ListUsers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // Create a new user
 // (POST /admin/users)
-func (_ Unimplemented) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) CreateUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Health check endpoint
 // (GET /ping)
-func (_ Unimplemented) GetPing(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) Ping(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -139,8 +202,19 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetAdminKeys operation middleware
-func (siw *ServerInterfaceWrapper) GetAdminKeys(w http.ResponseWriter, r *http.Request) {
+// ListUserApiKeys operation middleware
+func (siw *ServerInterfaceWrapper) ListUserApiKeys(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "userId" -------------
+	var userId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
 
 	ctx := r.Context()
 
@@ -149,7 +223,7 @@ func (siw *ServerInterfaceWrapper) GetAdminKeys(w http.ResponseWriter, r *http.R
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAdminKeys(w, r)
+		siw.Handler.ListUserApiKeys(w, r, userId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -159,8 +233,19 @@ func (siw *ServerInterfaceWrapper) GetAdminKeys(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
-// PostAdminKeys operation middleware
-func (siw *ServerInterfaceWrapper) PostAdminKeys(w http.ResponseWriter, r *http.Request) {
+// CreateUserApiKey operation middleware
+func (siw *ServerInterfaceWrapper) CreateUserApiKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "userId" -------------
+	var userId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
 
 	ctx := r.Context()
 
@@ -169,7 +254,7 @@ func (siw *ServerInterfaceWrapper) PostAdminKeys(w http.ResponseWriter, r *http.
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PostAdminKeys(w, r)
+		siw.Handler.CreateUserApiKey(w, r, userId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -179,8 +264,28 @@ func (siw *ServerInterfaceWrapper) PostAdminKeys(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
-// GetAdminUsers operation middleware
-func (siw *ServerInterfaceWrapper) GetAdminUsers(w http.ResponseWriter, r *http.Request) {
+// ListKeyServices operation middleware
+func (siw *ServerInterfaceWrapper) ListKeyServices(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "userId" -------------
+	var userId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "keyID" -------------
+	var keyID int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "keyID", chi.URLParam(r, "keyID"), &keyID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyID", Err: err})
+		return
+	}
 
 	ctx := r.Context()
 
@@ -189,7 +294,7 @@ func (siw *ServerInterfaceWrapper) GetAdminUsers(w http.ResponseWriter, r *http.
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAdminUsers(w, r)
+		siw.Handler.ListKeyServices(w, r, userId, keyID)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -199,8 +304,28 @@ func (siw *ServerInterfaceWrapper) GetAdminUsers(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
-// PostAdminUsers operation middleware
-func (siw *ServerInterfaceWrapper) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
+// AssociateKeyService operation middleware
+func (siw *ServerInterfaceWrapper) AssociateKeyService(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "userId" -------------
+	var userId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "keyID" -------------
+	var keyID int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "keyID", chi.URLParam(r, "keyID"), &keyID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyID", Err: err})
+		return
+	}
 
 	ctx := r.Context()
 
@@ -209,7 +334,7 @@ func (siw *ServerInterfaceWrapper) PostAdminUsers(w http.ResponseWriter, r *http
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PostAdminUsers(w, r)
+		siw.Handler.AssociateKeyService(w, r, userId, keyID)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -219,11 +344,51 @@ func (siw *ServerInterfaceWrapper) PostAdminUsers(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
-// GetPing operation middleware
-func (siw *ServerInterfaceWrapper) GetPing(w http.ResponseWriter, r *http.Request) {
+// ListUsers operation middleware
+func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, ApiKeyAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPing(w, r)
+		siw.Handler.ListUsers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateUser operation middleware
+func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, ApiKeyAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Ping operation middleware
+func (siw *ServerInterfaceWrapper) Ping(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Ping(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -347,19 +512,25 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/keys", wrapper.GetAdminKeys)
+		r.Get(options.BaseURL+"/admin/user/{userId}/keys", wrapper.ListUserApiKeys)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/admin/keys", wrapper.PostAdminKeys)
+		r.Post(options.BaseURL+"/admin/user/{userId}/keys", wrapper.CreateUserApiKey)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/users", wrapper.GetAdminUsers)
+		r.Get(options.BaseURL+"/admin/user/{userId}/keys/{keyID}/services", wrapper.ListKeyServices)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/admin/users", wrapper.PostAdminUsers)
+		r.Post(options.BaseURL+"/admin/user/{userId}/keys/{keyID}/services", wrapper.AssociateKeyService)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/ping", wrapper.GetPing)
+		r.Get(options.BaseURL+"/admin/users", wrapper.ListUsers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/users", wrapper.CreateUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/ping", wrapper.Ping)
 	})
 
 	return r
