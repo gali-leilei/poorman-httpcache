@@ -10,10 +10,16 @@ CREATE INDEX idx_services_name ON services(name);
 
 -- Service-related queries
 
+-- Create service
+-- name: CreateService :one
+INSERT INTO services (name, default_quota)
+VALUES ($1, $2)
+RETURNING id, name, default_quota;
+
 -- Get all services
 -- name: GetAllServices :many
-SELECT id, name FROM services;
+SELECT id, name, default_quota FROM services;
 
 -- Get service by name
 -- name: GetServiceByName :one
-SELECT * FROM services WHERE name = $1;
+SELECT id, name, default_quota FROM services WHERE name = $1;
