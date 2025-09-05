@@ -102,11 +102,11 @@ func (q *Queries) CreateUserAPIKey(ctx context.Context, arg *CreateUserAPIKeyPar
 	return &i, err
 }
 
-const getAPIKeyByKeyString = `-- name: GetAPIKeyByKeyString :one
-SELECT id, key_string,has_quota, status FROM api_keys WHERE key_string = $1
+const getAPIKeyByName = `-- name: GetAPIKeyByName :one
+SELECT id, key_string, has_quota, status FROM api_keys WHERE key_string = $1
 `
 
-type GetAPIKeyByKeyStringRow struct {
+type GetAPIKeyByNameRow struct {
 	ID        int64
 	KeyString string
 	HasQuota  bool
@@ -114,9 +114,9 @@ type GetAPIKeyByKeyStringRow struct {
 }
 
 // Get API key info by key string (for quota checking)
-func (q *Queries) GetAPIKeyByKeyString(ctx context.Context, keyString string) (*GetAPIKeyByKeyStringRow, error) {
-	row := q.db.QueryRow(ctx, getAPIKeyByKeyString, keyString)
-	var i GetAPIKeyByKeyStringRow
+func (q *Queries) GetAPIKeyByName(ctx context.Context, keyString string) (*GetAPIKeyByNameRow, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByName, keyString)
+	var i GetAPIKeyByNameRow
 	err := row.Scan(
 		&i.ID,
 		&i.KeyString,

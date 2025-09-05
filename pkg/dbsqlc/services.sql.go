@@ -9,17 +9,43 @@ import (
 	"context"
 )
 
-const getAllServices = `-- name: GetAllServices :many
+const createService = `-- name: CreateService :one
 
-SELECT id, name FROM services
+INSERT INTO services (name, default_quota)
+VALUES ($1, $2)
+RETURNING id, name, default_quota
 `
 
-type GetAllServicesRow struct {
-	ID   int64
-	Name string
+type CreateServiceParams struct {
+	Name         string
+	DefaultQuota int32
+}
+
+type CreateServiceRow struct {
+	ID           int64
+	Name         string
+	DefaultQuota int32
 }
 
 // Service-related queries
+// Create service
+func (q *Queries) CreateService(ctx context.Context, arg *CreateServiceParams) (*CreateServiceRow, error) {
+	row := q.db.QueryRow(ctx, createService, arg.Name, arg.DefaultQuota)
+	var i CreateServiceRow
+	err := row.Scan(&i.ID, &i.Name, &i.DefaultQuota)
+	return &i, err
+}
+
+const getAllServices = `-- name: GetAllServices :many
+SELECT id, name, default_quota FROM services
+`
+
+type GetAllServicesRow struct {
+	ID           int64
+	Name         string
+	DefaultQuota int32
+}
+
 // Get all services
 func (q *Queries) GetAllServices(ctx context.Context) ([]*GetAllServicesRow, error) {
 	rows, err := q.db.Query(ctx, getAllServices)
@@ -30,7 +56,7 @@ func (q *Queries) GetAllServices(ctx context.Context) ([]*GetAllServicesRow, err
 	var items []*GetAllServicesRow
 	for rows.Next() {
 		var i GetAllServicesRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.DefaultQuota); err != nil {
 			return nil, err
 		}
 		items = append(items, &i)
@@ -42,19 +68,19 @@ func (q *Queries) GetAllServices(ctx context.Context) ([]*GetAllServicesRow, err
 }
 
 const getServiceByName = `-- name: GetServiceByName :one
-SELECT id, name, default_quota, created_at, updated_at FROM services WHERE name = $1
+SELECT id, name, default_quota FROM services WHERE name = $1
 `
 
+type GetServiceByNameRow struct {
+	ID           int64
+	Name         string
+	DefaultQuota int32
+}
+
 // Get service by name
-func (q *Queries) GetServiceByName(ctx context.Context, name string) (*Services, error) {
+func (q *Queries) GetServiceByName(ctx context.Context, name string) (*GetServiceByNameRow, error) {
 	row := q.db.QueryRow(ctx, getServiceByName, name)
-	var i Services
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.DefaultQuota,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
+	var i GetServiceByNameRow
+	err := row.Scan(&i.ID, &i.Name, &i.DefaultQuota)
 	return &i, err
 }
