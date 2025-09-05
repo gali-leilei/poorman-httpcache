@@ -3,12 +3,9 @@ package backup
 import (
 	"context"
 
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 )
-
-type Metric
 
 type ArchiveMetricArgs struct {
 	Parent     Parent   `json:"parent"`
@@ -29,11 +26,12 @@ func NewArchiveMetricWorker(dbPool *pgxpool.Pool) *ArchiveMetricWorker {
 }
 
 func (w *ArchiveMetricWorker) Run(ctx context.Context, job *river.Job[ArchiveMetricArgs]) error {
-	client := river.ClientFromContext[pgx.Tx](ctx)
 
 	tx, err := w.dbPool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
+
+	return nil
 }

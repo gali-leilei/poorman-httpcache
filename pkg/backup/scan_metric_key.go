@@ -3,9 +3,7 @@ package backup
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
-	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/riverqueue/river"
@@ -49,8 +47,8 @@ for i = 1, #matched_keys do
 end
 
 -- pack the result into a json
-local final = cjson.encode(result)
-return {new_cursor, final}
+local final = {cursor = new_cursor, result = result}
+return cjson.encode(final)
 `
 
 type ScanMetricsKeyResult struct {
@@ -72,43 +70,8 @@ func NewScanMetricsKeyWorker(redisC *redis.Client) *ScanMetricsKeyWorker {
 	}
 }
 
-func parseRedisScriptResult(result any) (*ScanMetricsKeyResult, error) {
-	values, ok := result.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid script result format")
-	}
-
-	if len(values) != 2 {
-		return nil, fmt.Errorf("invalid script result format")
-	}
-
-	cursor, ok := values[0].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid script result format")
-	}
-
-	keys, ok := values[1].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid script result format")
-	}
-
-	// json unmarshal
-	var twoLevelJson map[string]map[string]string
-	err := json.Unmarshal([]byte(keys), &twoLevelJson)
-	if err != nil {
-		return nil, fmt.Errorf("invalid script result format")
-	}
-
-	finalResult := &ScanMetricsKeyResult{
-		Cursor: cursor,
-		Result: twoLevelJson,
-	}
-
-	return finalResult, nil
-}
-
 func (w *ScanMetricsKeyWorker) Run(ctx context.Context, job *river.Job[ScanMetricsKeyArgs]) error {
-	client := river.ClientFromContext[pgx.Tx](ctx)
+	// client := river.ClientFromContext[pgx.Tx](ctx)
 
 	tx, err := w.dbPool.Begin(ctx)
 	if err != nil {
@@ -120,20 +83,21 @@ func (w *ScanMetricsKeyWorker) Run(ctx context.Context, job *river.Job[ScanMetri
 	cursor := "0"
 	for {
 		argv := []string{job.Args.Prefix, cursor, "100"}
-		result, err := w.luaScript.Run(ctx, w.redis, keys, argv).Result()
+		resultStr, err := w.luaScript.Run(ctx, w.redis, keys, argv).Text()
 		if err != nil {
 			return err
 		}
 
-		cursor, metricKeys, err = parseRedisScriptResult(result)
+		var result ScanMetricsKeyResult
+		err = json.Unmarshal([]byte(resultStr), &result)
 		if err != nil {
 			return err
 		}
 
-		_, err := client.InsertTx(ctx, tx, ArchiveMetricKeyJob, job.Args)
-		if err != nil {
-			return err
-		}
+		// _, err := client.InsertTx(ctx, tx, ArchiveMetricKeyJob, job.Args)
+		// if err != nil {
+		// 	return err
+		// }
 	}
 	return nil
 }
