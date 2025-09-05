@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"httpcache/pkg"
 	"log/slog"
 	"strconv"
 
@@ -82,19 +83,26 @@ return {tostring(final_available), "OK"}
 // RedisAdapter implements the Adapter interface using Redis as the backend
 type RedisAdapter struct {
 	redis     *redis.Client
-	serviceID string
+	serviceID int
 	luaScript *redis.Script
+	ns        *pkg.NameServer
 	logger    *slog.Logger
 }
 
 // NewRedisAdapter creates a new Redis-based quota adapter
-func NewRedisAdapter(opt *redis.Options, serviceID string, logger *slog.Logger) *RedisAdapter {
+func NewRedisAdapter(opt *redis.Options, serviceName string, ns *pkg.NameServer, logger *slog.Logger) *RedisAdapter {
 	client := redis.NewClient(opt)
 	logger = logger.With("adapter", "redis")
+	serviceID, err := ns.ResolveServiceName(serviceName)
+	if err != nil {
+		logger.Error("failed to resolve service ID", "serviceName", serviceName, "error", err)
+		panic(err)
+	}
 	return &RedisAdapter{
 		redis:     client,
 		serviceID: serviceID,
 		luaScript: redis.NewScript(updateQuota),
+		ns:        ns,
 		logger:    logger,
 	}
 }
@@ -139,10 +147,14 @@ func (ra *RedisAdapter) Reserve(ctx context.Context, key string, amount int) (bo
 		return false, ErrInvalidAmount
 	}
 
+	apiKeyID, err := ra.ns.ResolveAPIKey(key)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve API key: %w", err)
+	}
 	keys := []string{} // Empty keys as we're using ARGV for all parameters
 	argv := []string{
-		ra.serviceID,
-		key,
+		strconv.Itoa(ra.serviceID),
+		strconv.Itoa(apiKeyID),
 		strconv.Itoa(amount),
 		strconv.Itoa(BucketSizeMinutes),
 		strconv.Itoa(MetricTTLSeconds),
@@ -174,9 +186,14 @@ func (ra *RedisAdapter) Refund(ctx context.Context, key string, amount int) (boo
 		return false, ErrInvalidAmount
 	}
 
+	apiKeyID, err := ra.ns.ResolveAPIKey(key)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve API key: %w", err)
+	}
 	keys := []string{} // Empty keys as we're using ARGV for all parameters
 	argv := []string{
-		ra.serviceID,
+		strconv.Itoa(ra.serviceID),
+		strconv.Itoa(apiKeyID),
 		key,
 		strconv.Itoa(-amount), // Negative amount for refund
 		strconv.Itoa(BucketSizeMinutes),
