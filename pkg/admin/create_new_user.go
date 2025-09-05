@@ -7,11 +7,11 @@ import (
 
 // CreateNewUser creates a new user in the system.
 // This function will return an error if the user already exists.
-func (as *AdminService) CreateNewUser(ctx context.Context, email string, isServiceKey bool) (int64, error) {
+func (as *AdminService) CreateNewUser(ctx context.Context, email string, isServiceKey bool) (*User, error) {
 	// Start transaction
 	tx, err := as.db.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
@@ -26,19 +26,23 @@ func (as *AdminService) CreateNewUser(ctx context.Context, email string, isServi
 	// Check if user already exists
 	_, err = qtx.GetUserByEmail(ctx, email)
 	if err == nil {
-		return 0, fmt.Errorf("user with email %s already exists", email)
+		return nil, fmt.Errorf("user with email %s already exists", email)
 	}
 
 	// Create new user
 	user, err := qtx.CreateUser(ctx, email)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create user: %w", err)
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return user.ID, nil
+	return &User{
+		ID:        user.ID,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt.Time,
+	}, nil
 }

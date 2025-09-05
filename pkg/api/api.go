@@ -137,7 +137,7 @@ func (s *Server) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create the user using AdminService
-	result, err := s.adminService.InviteNewUser(ctx, string(req.Email), false)
+	user, err := s.adminService.CreateNewUser(ctx, string(req.Email), false)
 	if err != nil {
 		s.logger.Error("failed to create user", "email", req.Email, "error", err)
 		s.writeJSONError(w, http.StatusInternalServerError, "Failed to create user", []string{err.Error()})
@@ -146,9 +146,9 @@ func (s *Server) PostAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 	// Convert admin model to API model
 	apiUser := User{
-		Id:        result.User.ID,
-		Email:     openapi_types.Email(result.User.Email),
-		CreatedAt: result.User.CreatedAt,
+		Id:        user.ID,
+		Email:     openapi_types.Email(req.Email),
+		CreatedAt: user.CreatedAt,
 	}
 
 	s.writeJSONResponse(w, http.StatusCreated, apiUser)

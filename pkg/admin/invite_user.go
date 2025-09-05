@@ -9,9 +9,9 @@ import (
 
 // InviteNewUserResult represents the result of inviting a new user
 type InviteNewUserResult struct {
-	User          *User           `json:"user"`
-	APIKey        *APIKey         `json:"api_key"`
-	InitialQuotas []*ServiceQuota `json:"initial_quotas"`
+	User          *User      `json:"user"`
+	APIKey        *APIKey    `json:"api_key"`
+	InitialQuotas []*Service `json:"initial_quotas"`
 }
 
 // ServiceKeyPrefix is the prefix for service keys
@@ -25,11 +25,6 @@ func generateAPIKey() (string, error) {
 		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 	return ServiceKeyPrefix + hex.EncodeToString(bytes), nil
-}
-
-// isServiceKey checks if an API key string is a service key based on its prefix
-func isServiceKey(apiKey string) bool {
-	return len(apiKey) > len(ServiceKeyPrefix) && apiKey[:len(ServiceKeyPrefix)] == ServiceKeyPrefix
 }
 
 // InviteNewUser assigns an API key to a new user and optionally sets up initial quotas for all services.
@@ -51,7 +46,7 @@ func (as *AdminService) InviteNewUser(ctx context.Context, email string, isServi
 	}
 
 	// Step 3: Add key to user (this handles quota initialization internally)
-	err = as.AddKeyToUser(ctx, userID, keyString)
+	_, err = as.AddKeyToUser(ctx, userID, keyString)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +73,7 @@ func (as *AdminService) InviteNewUser(ctx context.Context, email string, isServi
 	}
 
 	// Get quotas if not a service key
-	var initialQuotas []*ServiceQuota
+	var initialQuotas []*Service
 	if !isServiceKey {
 		quotas, err := qtx.GetAPIKeyQuotas(ctx, apiKey.ID)
 		if err != nil {
@@ -105,7 +100,9 @@ func (as *AdminService) InviteNewUser(ctx context.Context, email string, isServi
 				return nil, fmt.Errorf("service not found for ID %d", quota.ServiceID)
 			}
 
-			initialQuotas = append(initialQuotas, &ServiceQuota{
+			initialQuotas = append(initialQuotas, &Service{
+				ID:             quota.ServiceID,
+				Name:           serviceName,
 				ServiceName:    serviceName,
 				InitialQuota:   quota.Available + quota.Consumed, // Total quota
 				RemainingQuota: quota.Available,                  // Available quota

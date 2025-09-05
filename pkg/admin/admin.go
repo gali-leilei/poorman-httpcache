@@ -37,9 +37,11 @@ type APIKey struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// ServiceQuota represents quota allocation for a service
-type ServiceQuota struct {
-	ServiceName    string `json:"service_name"`
+// Service represents quota allocation for a service
+type Service struct {
+	ID             int64  `json:"id"`
+	Name           string `json:"service_name"`
+	ServiceName    string `json:"-"` // Alias for compatibility (not serialized)
 	InitialQuota   int32  `json:"initial_quota"`
-	RemainingQuota int32  `json:"remaining_quota"`
+	RemainingQuota int32  `json:"remaining_quota"` // Available quota
 }

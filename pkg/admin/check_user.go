@@ -16,8 +16,8 @@ type UserInfo struct {
 
 // APIKeyInfo represents an API key with its associated quotas
 type APIKeyInfo struct {
-	APIKey        *APIKey         `json:"api_key"`
-	ServiceQuotas []*ServiceQuota `json:"service_quotas"`
+	APIKey        *APIKey    `json:"api_key"`
+	ServiceQuotas []*Service `json:"service_quotas"`
 }
 
 // CheckUser retrieves and displays an existing user's API key(s) and service quotas
@@ -47,9 +47,11 @@ func (as *AdminService) CheckUser(ctx context.Context, email string) (*UserInfo,
 		}
 
 		// Map quota records to domain models
-		var serviceQuotas []*ServiceQuota
+		var serviceQuotas []*Service
 		for _, quota := range quotaRecords {
-			serviceQuotas = append(serviceQuotas, &ServiceQuota{
+			serviceQuotas = append(serviceQuotas, &Service{
+				ID:             quota.ServiceID,
+				Name:           quota.ServiceName,
 				ServiceName:    quota.ServiceName,
 				InitialQuota:   quota.Available + quota.Consumed, // Total quota
 				RemainingQuota: quota.Available,                  // Available quota
