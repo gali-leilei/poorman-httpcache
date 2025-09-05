@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/vmihailenco/msgpack/v5"
+	"golang.org/x/sync/singleflight"
 )
 
 // NameServer is a name server that resolves
@@ -21,6 +22,7 @@ type NameServer struct {
 	cache   *cache.Cache
 	queries *dbsqlc.Queries
 	logger  *slog.Logger
+	sf      singleflight.Group
 }
 
 // NewNameServer creates a new NameServer instance
@@ -55,24 +57,40 @@ func (ns *NameServer) ResolveServiceName(serviceName string) (int, error) {
 		return serviceID, nil
 	}
 
-	// 2. Cache miss - check postgres
-	service, err := ns.queries.GetServiceByName(context.Background(), serviceName)
-	if err != nil {
-		return 0, fmt.Errorf("GetServiceByName: %w", err)
-	}
-	serviceID = int(service.ID)
+	// 2. Cache miss - use single flight for database query
+	result, err, _ := ns.sf.Do(key, func() (interface{}, error) {
+		// Check cache again in case another goroutine already fetched it
+		var cachedServiceID int
+		if cacheErr := ns.cache.Get(context.Background(), key, &cachedServiceID); cacheErr == nil {
+			return cachedServiceID, nil
+		}
 
-	// Cache the result (automatically sets in both local TinyLFU and Redis)
-	err = ns.cache.Set(&cache.Item{
-		Key:   key,
-		Value: serviceID,
-		TTL:   30 * time.Minute,
+		// Query postgres
+		service, err := ns.queries.GetServiceByName(context.Background(), serviceName)
+		if err != nil {
+			return 0, fmt.Errorf("GetServiceByName: %w", err)
+		}
+		fetchedServiceID := int(service.ID)
+
+		// Cache the result (automatically sets in both local TinyLFU and Redis)
+		cacheErr := ns.cache.Set(&cache.Item{
+			Key:   key,
+			Value: fetchedServiceID,
+			TTL:   30 * time.Minute,
+		})
+		if cacheErr != nil {
+			ns.logger.Warn("failed to cache service name", "service", serviceName, "error", cacheErr)
+		}
+
+		ns.logger.Debug("service name resolved from postgres", "service", serviceName, "id", fetchedServiceID)
+		return fetchedServiceID, nil
 	})
+
 	if err != nil {
-		ns.logger.Warn("failed to cache service name", "service", serviceName, "error", err)
+		return 0, err
 	}
 
-	ns.logger.Debug("service name resolved from postgres", "service", serviceName, "id", serviceID)
+	serviceID = result.(int)
 	return serviceID, nil
 }
 
@@ -88,23 +106,39 @@ func (ns *NameServer) ResolveAPIKey(apiKey string) (int, error) {
 		return apiKeyID, nil
 	}
 
-	// 2. Cache miss - check postgres
-	apiKeyData, err := ns.queries.GetAPIKeyByName(context.Background(), apiKey)
+	// 2. Cache miss - use single flight for database query
+	result, err, _ := ns.sf.Do(key, func() (interface{}, error) {
+		// Check cache again in case another goroutine already fetched it
+		var cachedAPIKeyID int
+		if cacheErr := ns.cache.Get(context.Background(), key, &cachedAPIKeyID); cacheErr == nil {
+			return cachedAPIKeyID, nil
+		}
+
+		// Query postgres
+		apiKeyData, err := ns.queries.GetAPIKeyByName(context.Background(), apiKey)
+		if err != nil {
+			return 0, err
+		}
+		fetchedAPIKeyID := int(apiKeyData.ID)
+
+		// Cache the result (automatically sets in both local TinyLFU and Redis)
+		cacheErr := ns.cache.Set(&cache.Item{
+			Key:   key,
+			Value: fetchedAPIKeyID,
+			TTL:   30 * time.Minute,
+		})
+		if cacheErr != nil {
+			ns.logger.Warn("failed to cache api key", "key", apiKey, "error", cacheErr)
+		}
+
+		ns.logger.Debug("api key resolved from postgres", "key", apiKey, "id", fetchedAPIKeyID)
+		return fetchedAPIKeyID, nil
+	})
+
 	if err != nil {
 		return 0, err
 	}
-	apiKeyID = int(apiKeyData.ID)
 
-	// Cache the result (automatically sets in both local TinyLFU and Redis)
-	err = ns.cache.Set(&cache.Item{
-		Key:   key,
-		Value: apiKeyID,
-		TTL:   30 * time.Minute,
-	})
-	if err != nil {
-		ns.logger.Warn("failed to cache api key", "key", apiKey, "error", err)
-	}
-
-	ns.logger.Debug("api key resolved from postgres", "key", apiKey, "id", apiKeyID)
+	apiKeyID = result.(int)
 	return apiKeyID, nil
 }
