@@ -1,5 +1,7 @@
 set dotenv-load := true
 set dotenv-path := "{{justfile_directory()}}/.env"
+path_to_migrations := "{{justfile_directory()}}/pkg/dbmigrate"
+database_url := "{{env.POSTGRES_URL}}"
 
 # default recipe to show all recipes
 default:
@@ -40,5 +42,25 @@ deploy binary: (build binary)
 
 # kill the background process
 [group('deploy')]
-kill binary:
+kill:
 	kill -9 $$(cat -p "{{justfile_directory()}}"/bin/save_pid.txt) && rm {{justfile_directory()}}/bin/save_pid.txt
+
+# create new migration
+[group('db')]
+migrate-create name:
+	migrate create -ext sql -dir "{{justfile_directory()}}"/pkg/dbmigrate -seq {{name}}
+
+# run migrate force
+[group('db')]
+migrate-force version:
+	migrate -path {{path_to_migrations}} -database {{database_url}} force {{version}}
+
+# run migrate down
+[group('db')]
+migrate-down:
+	migrate -path {{path_to_migrations}} -database {{database_url}} down
+
+# run migrate up
+[group('db')]
+migrate-up:
+	migrate -path {{path_to_migrations}} -database {{database_url}} up

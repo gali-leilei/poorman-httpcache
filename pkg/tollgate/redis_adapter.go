@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 
 	"github.com/redis/go-redis/v9"
@@ -16,8 +17,10 @@ const (
 	MetricTTLSeconds = 24 * 60 * 60
 	// StatusOK indicates successful quota operation
 	StatusOK = "OK"
-	// StatusExhausted indicates quota has been exhausted
-	StatusExhausted = "EXHAUSTED"
+	// StatusQuotaExhausted indicates quota has been exhausted
+	StatusQuotaExhausted = "QUOTA_EXHAUSTED"
+	// StatusKeyNotFound indicates quota key does not exist
+	StatusKeyNotFound = "KEY_NOT_FOUND"
 )
 
 var (
@@ -43,6 +46,12 @@ local current_time = timestamp[1]
 local bucket_timestamp = math.floor(current_time / bucket_size) * bucket_size
 local bucket_key = "bucket:" .. bucket_timestamp
 
+-- check if quota key exists
+local quota_exists = redis.call("EXISTS", quota_key)
+if quota_exists == 0 then
+	return {tostring(0), "KEY_NOT_FOUND"}
+end
+
 -- update quota
 local service_account = redis.call("HGET", quota_key, "service_account")
 if service_account == false then
@@ -53,7 +62,7 @@ else
 	local available_str = redis.call("HGET", quota_key, "available")
 	local available = tonumber(available_str) or 0
 	if available < amount then
-		return {tostring(available), "EXHAUSTED"}
+		return {tostring(available), "QUOTA_EXHAUSTED"}
 	end
 	redis.call("HINCRBY", quota_key, "available", -amount)
 	redis.call("HINCRBY", quota_key, "consumed", amount)
@@ -75,14 +84,18 @@ type RedisAdapter struct {
 	redis     *redis.Client
 	serviceID string
 	luaScript *redis.Script
+	logger    *slog.Logger
 }
 
 // NewRedisAdapter creates a new Redis-based quota adapter
-func NewRedisAdapter(redisC *redis.Client, serviceID string) *RedisAdapter {
+func NewRedisAdapter(opt *redis.Options, serviceID string, logger *slog.Logger) *RedisAdapter {
+	client := redis.NewClient(opt)
+	logger = logger.With("adapter", "redis")
 	return &RedisAdapter{
-		redis:     redisC,
+		redis:     client,
 		serviceID: serviceID,
 		luaScript: redis.NewScript(updateQuota),
+		logger:    logger,
 	}
 }
 
@@ -135,12 +148,15 @@ func (ra *RedisAdapter) Reserve(ctx context.Context, key string, amount int) (bo
 		strconv.Itoa(MetricTTLSeconds),
 	}
 
+	ra.logger.Info("executing quota reservation", "key", key, "amount", amount)
 	result, err := ra.luaScript.Run(ctx, ra.redis, keys, argv).Result()
 	if err != nil {
+		ra.logger.Error("failed to execute quota reservation", "key", key, "error", err)
 		return false, fmt.Errorf("failed to execute quota reservation: %w", err)
 	}
 
-	_, status, err := parseUpdateQuotaResult(result)
+	available, status, err := parseUpdateQuotaResult(result)
+	ra.logger.Info("lua script result", "key", key, "available", available, "status", status)
 	if err != nil {
 		return false, err
 	}
