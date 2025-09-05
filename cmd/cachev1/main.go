@@ -63,7 +63,7 @@ func NewJinaProxy(cache *cache.Cache, cfg pkg.Config, logger *slog.Logger) (http
 	secretKeyExtract := func(r *http.Request) string {
 		return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
-	tollgate := tollgate.New(skAdapter, secretKeyExtract)
+	tollgate := tollgate.New(skAdapter, secretKeyExtract, logger)
 
 	return tollgate.HTTPHandlerMiddleware(cache.HTTPHandlerMiddleware(rp)), nil
 }
@@ -90,7 +90,7 @@ func NewSerperProxy(cache *cache.Cache, cfg pkg.Config, logger *slog.Logger) (ht
 	secretKeyExtract := func(r *http.Request) string {
 		return r.Header.Get("X-API-KEY")
 	}
-	tollgate := tollgate.New(skAdapter, secretKeyExtract)
+	tollgate := tollgate.New(skAdapter, secretKeyExtract, logger)
 
 	return tollgate.HTTPHandlerMiddleware(cache.HTTPHandlerMiddleware(rp)), nil
 }

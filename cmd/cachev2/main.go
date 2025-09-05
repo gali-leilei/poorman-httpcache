@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/middleware"
+	"github.com/redis/go-redis/v9"
 )
 
 func NewJinaProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
@@ -37,11 +38,16 @@ func NewJinaProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 		return nil, err
 	}
 
-	skAdapter := tollgate.NewSecretKeyAdapter(cfg.InternalKey, "jina")
+	rdsAdapter := tollgate.NewRedisAdapter(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.RedisHost, cfg.RedisPort),
+		Username: cfg.RedisUsername,
+		Password: cfg.RedisPassword,
+		DB:       cfg.RedisDB + 1,
+	}, "jina", logger)
 	secretKeyExtract := func(r *http.Request) string {
 		return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
-	tollgate := tollgate.New(skAdapter, secretKeyExtract)
+	tollgate := tollgate.New(rdsAdapter, secretKeyExtract, logger)
 
 	return tollgate.HTTPHandlerMiddleware(rp), nil
 }
@@ -64,11 +70,16 @@ func NewSerperProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 		logger.Error("Failed to create Serper proxy", "error", err)
 		return nil, err
 	}
-	skAdapter := tollgate.NewSecretKeyAdapter(cfg.InternalKey, "serper")
+	rdsAdapter := tollgate.NewRedisAdapter(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.RedisHost, cfg.RedisPort),
+		Username: cfg.RedisUsername,
+		Password: cfg.RedisPassword,
+		DB:       cfg.RedisDB + 2,
+	}, "serper", logger)
 	secretKeyExtract := func(r *http.Request) string {
 		return r.Header.Get("X-API-KEY")
 	}
-	tollgate := tollgate.New(skAdapter, secretKeyExtract)
+	tollgate := tollgate.New(rdsAdapter, secretKeyExtract, logger)
 
 	return tollgate.HTTPHandlerMiddleware(rp), nil
 }
