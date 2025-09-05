@@ -216,7 +216,7 @@ func (as *AdminService) InviteNewUser(ctx context.Context, email string, isServi
 		return nil, fmt.Errorf("failed to get created user: %w", err)
 	}
 
-	apiKeyBasic, err := qtx.GetAPIKeyByKeyString(ctx, keyString)
+	apiKeyBasic, err := qtx.GetAPIKeyByName(ctx, keyString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get created API key: %w", err)
 	}
