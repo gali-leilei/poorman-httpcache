@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"httpcache/pkg"
+	"httpcache/pkg/dbsqlc"
 	"httpcache/pkg/proxy"
 	"httpcache/pkg/tollgate"
 	"log/slog"
@@ -19,6 +20,35 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 )
+
+// warmupCache warms up the cache by loading table `quota` from postgres into redis.
+func warmupCache(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
+	redis := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.RedisHost, cfg.RedisPort),
+		Username: cfg.RedisUsername,
+		Password: cfg.RedisPassword,
+		DB:       cfg.RedisDB,
+	})
+	if err := redis.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("failed to ping redis: %w", err)
+	}
+
+	defer redis.Close()
+
+	db, err := pgx.Connect(ctx, cfg.PostgresURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to postgres: %w", err)
+	}
+	if err := db.Ping(ctx); err != nil {
+		return fmt.Errorf("failed to ping postgres: %w", err)
+	}
+	defer db.Close(ctx)
+
+	queries := dbsqlc.New(db)
+	cw := pkg.NewCacheWarmer(redis, queries, logger, 1000)
+	cw.Do(ctx)
+	return nil
+}
 
 func NewNameServer(cfg pkg.Config, logger *slog.Logger) *pkg.NameServer {
 	db, err := pgx.Connect(context.Background(), cfg.PostgresURL)
@@ -172,6 +202,11 @@ func main() {
 	logger := pkg.GetLogger(cfg.LogLevel)
 	logger.Info("Config", "cfg", cfg)
 	ctx := context.Background()
+
+	if err := warmupCache(ctx, cfg, logger); err != nil {
+		logger.Error("Failed to warm up redis cache", "error", err)
+		os.Exit(1)
+	}
 
 	if err := run(ctx, cfg, logger); err != nil {
 		logger.Error("Failed to run", "error", err)
