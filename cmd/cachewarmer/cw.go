@@ -107,6 +107,14 @@ func (cw *CacheWarmer) Do(ctx context.Context) error {
 
 	var errs []error
 	for offset := 0; ; offset += cw.batchSize {
+		// Check for context cancellation before processing each batch
+		select {
+		case <-ctx.Done():
+			cw.logger.Info("Cache warming cancelled by context", "processed_offset", offset)
+			return ctx.Err()
+		default:
+		}
+
 		sqlRows, err := cw.queries.GetAllQuotas(ctx, &dbsqlc.GetAllQuotasParams{
 			Limit:  int32(cw.batchSize),
 			Offset: int32(offset),
