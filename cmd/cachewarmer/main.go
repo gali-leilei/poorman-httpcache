@@ -35,7 +35,7 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	defer db.Close(ctx)
 
 	queries := dbsqlc.New(db)
-	cw := NewCacheWarmer(redis, queries, logger, 1000)
+	cw := pkg.NewCacheWarmer(redis, queries, logger, 1000)
 	cw.Do(ctx)
 	return nil
 }
