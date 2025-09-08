@@ -59,6 +59,64 @@ func (q *Queries) GetAPIKeyQuotas(ctx context.Context, apiKeyID int64) ([]*GetAP
 	return items, nil
 }
 
+const getAllQuotas = `-- name: GetAllQuotas :many
+with key_info as (
+    SELECT id, has_quota FROM api_keys
+    WHERE status = 'assigned'
+), quota_join_key as (
+    SELECT 
+    q.id,q.api_key_id, q.service_id, q.available, q.consumed, ki.has_quota as has_quota
+    FROM quotas q
+    JOIN key_info ki ON q.api_key_id = ki.id
+)
+SELECT id, api_key_id, service_id, available, consumed, has_quota FROM quota_join_key
+ORDER BY id
+LIMIT $2::int
+OFFSET $1::int
+`
+
+type GetAllQuotasParams struct {
+	Offset int32
+	Limit  int32
+}
+
+type GetAllQuotasRow struct {
+	ID        int64
+	ApiKeyID  int64
+	ServiceID int64
+	Available int32
+	Consumed  int32
+	HasQuota  bool
+}
+
+// Get all quotas
+func (q *Queries) GetAllQuotas(ctx context.Context, arg *GetAllQuotasParams) ([]*GetAllQuotasRow, error) {
+	rows, err := q.db.Query(ctx, getAllQuotas, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*GetAllQuotasRow
+	for rows.Next() {
+		var i GetAllQuotasRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApiKeyID,
+			&i.ServiceID,
+			&i.Available,
+			&i.Consumed,
+			&i.HasQuota,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getQuotaByID = `-- name: GetQuotaByID :one
 SELECT aksq.consumed, aksq.available
 FROM quotas aksq

@@ -8,13 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type ApiKeyStatusEvents struct {
-	ID        int64
-	ApiKeyID  int64
-	Status    string
-	CreatedAt pgtype.Timestamptz
-}
-
 type ApiKeyStatuses struct {
 	Name        string
 	Description pgtype.Text

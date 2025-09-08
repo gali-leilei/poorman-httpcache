@@ -8,7 +8,6 @@ sql:
       - "api_key_statuses.sql"
       - "quotas.sql"
       - "metrics.sql"
-      - "api_key_status_events.sql"
     schema:
       - "users.sql"
       - "services.sql"
@@ -16,7 +15,6 @@ sql:
       - "api_key_statuses.sql"
       - "quotas.sql"
       - "metrics.sql"
-      - "api_key_status_events.sql"
     gen:
       go:
         package: "dbsqlc"
