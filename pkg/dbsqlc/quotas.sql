@@ -45,6 +45,22 @@ JOIN services s ON aksq.service_id = s.id
 JOIN api_keys ak ON aksq.api_key_id = ak.id
 WHERE ak.key_string = $1 and s.name = $2;
 
+-- Get all quotas
+-- name: GetAllQuotas :many
+with key_info as (
+    SELECT id, has_quota FROM api_keys
+    WHERE status = 'assigned'
+), quota_join_key as (
+    SELECT 
+    q.id,q.api_key_id, q.service_id, q.available, q.consumed, ki.has_quota as has_quota
+    FROM quotas q
+    JOIN key_info ki ON q.api_key_id = ki.id
+)
+SELECT id, api_key_id, service_id, available, consumed, has_quota FROM quota_join_key
+ORDER BY id
+LIMIT sqlc.arg('limit')::int
+OFFSET sqlc.arg('offset')::int
+;
 
 -- Reserve $amount quota for ($api_key, $service_name)
 -- name: ReserveQuota :one
