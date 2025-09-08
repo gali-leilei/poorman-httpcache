@@ -59,7 +59,8 @@ func NewJinaProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 		Addr:     fmt.Sprintf("%s:%d", cfg.RedisHost, cfg.RedisPort),
 		Username: cfg.RedisUsername,
 		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB + 1,
+		// DB:       cfg.RedisDB + 1,
+		DB: cfg.RedisDB,
 	}, "jina", nameServer, logger)
 	secretKeyExtract := func(r *http.Request) string {
 		return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -92,7 +93,8 @@ func NewSerperProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 		Addr:     fmt.Sprintf("%s:%d", cfg.RedisHost, cfg.RedisPort),
 		Username: cfg.RedisUsername,
 		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB + 2,
+		// DB:       cfg.RedisDB + 2,
+		DB: cfg.RedisDB,
 	}, "serper", nameServer, logger)
 	secretKeyExtract := func(r *http.Request) string {
 		return r.Header.Get("X-API-KEY")

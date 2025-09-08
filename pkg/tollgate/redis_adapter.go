@@ -72,7 +72,7 @@ end
 
 -- update metric
 redis.call("HINCRBY", metric_key, bucket_key, amount)
-redis.call("HEXPIRE", metric_key, bucket_key, ttl)
+redis.call("HEXPIRE", metric_key, ttl, "FIELDS", 1, bucket_key)
 
 -- return available quota
 local final_available_str = redis.call("HGET", quota_key, "available")
@@ -194,7 +194,6 @@ func (ra *RedisAdapter) Refund(ctx context.Context, key string, amount int) (boo
 	argv := []string{
 		strconv.Itoa(ra.serviceID),
 		strconv.Itoa(apiKeyID),
-		key,
 		strconv.Itoa(-amount), // Negative amount for refund
 		strconv.Itoa(BucketSizeMinutes),
 		strconv.Itoa(MetricTTLSeconds),
@@ -202,6 +201,7 @@ func (ra *RedisAdapter) Refund(ctx context.Context, key string, amount int) (boo
 
 	result, err := ra.luaScript.Run(ctx, ra.redis, keys, argv).Result()
 	if err != nil {
+		ra.logger.Error("failed to execute quota refund", "key", key, "error", err)
 		return false, fmt.Errorf("failed to execute quota refund: %w", err)
 	}
 
