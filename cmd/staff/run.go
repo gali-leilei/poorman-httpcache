@@ -14,6 +14,8 @@ import (
 	"httpcache/pkg/staff"
 
 	"github.com/alexedwards/scs/v2"
+	"github.com/go-chi/httprate"
+	httprateredis "github.com/go-chi/httprate-redis"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 )
@@ -59,15 +61,27 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	sm.Store = store
 	sm.Lifetime = 24 * time.Hour
 	sm.Cookie.Name = "miromind-staff-session"
-	// set to true for production
-	// sm.Cookie.Secure = true
+	// secure by default
+	sm.Cookie.Secure = cfg.Env != "development"
 
 	router := staff.NewRouter(sm, allowList, sendMail, form, logger)
+
+	// rate limter
+	rateLimter := httprate.Limit(
+		20,
+		time.Minute,
+		httprate.WithKeyByIP(),
+		httprateredis.WithRedisLimitCounter(&httprateredis.Config{
+			Host:    cfg.RedisHost,
+			Port:    uint16(cfg.RedisPort),
+			DBIndex: 5,
+		}),
+	)
 
 	// Single server listening on port 8080
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: router,
+		Handler: rateLimter(router),
 	}
 
 	// Start the single server

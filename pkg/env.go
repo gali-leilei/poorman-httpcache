@@ -16,6 +16,7 @@ import (
 
 type Config struct {
 	// general
+	Env      string `env:"ENV" envDefault:"development"`
 	Port     int    `env:"PORT" envDefault:"8080"`
 	LogLevel string `env:"LOG_LEVEL" envDefault:"debug"`
 	// redis
@@ -103,7 +104,6 @@ func GetConfig() (Config, error) {
 	if err := testConfig(cfg); err != nil {
 		return cfg, fmt.Errorf("testConfig: %w", err)
 	}
-
 	return cfg, nil
 }
 
