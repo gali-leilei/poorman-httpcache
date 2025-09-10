@@ -16,7 +16,6 @@ import (
 
 type Config struct {
 	// general
-	Env      string `env:"ENV" envDefault:"development"`
 	Port     int    `env:"PORT" envDefault:"8080"`
 	LogLevel string `env:"LOG_LEVEL" envDefault:"debug"`
 	// redis
@@ -44,7 +43,7 @@ type Config struct {
 	// resend
 	ResendAPIKey string `env:"RESEND_API_KEY"`
 	EmailDomain  string `env:"EMAIL_DOMAIN"`
-	HostDomain   string `env:"HOST_DOMAIN"`
+	AuthDomain   string `env:"AUTH_DOMAIN"`
 }
 
 // GetConfig parses the environment variables and hydrates the Config struct.

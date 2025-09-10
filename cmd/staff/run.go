@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -43,7 +44,7 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 		return fmt.Errorf("staff.NewAllowlist(): %w", err)
 	}
 
-	sendMail, err := staff.NewSendMail(cfg.ResendAPIKey, cfg.EmailDomain, cfg.HostDomain)
+	sendMail, err := staff.NewSendMail(cfg.ResendAPIKey, cfg.EmailDomain, cfg.AuthDomain)
 	if err != nil {
 		return fmt.Errorf("staff.NewSendMail(): %w", err)
 	}
@@ -61,8 +62,20 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 	sm.Store = store
 	sm.Lifetime = 24 * time.Hour
 	sm.Cookie.Name = "miromind-staff-session"
-	// secure by default
-	sm.Cookie.Secure = cfg.Env != "development"
+	// configure cookie based on auth domain
+	authDomain, err := url.Parse(cfg.AuthDomain)
+	if err != nil {
+		return fmt.Errorf("url.Parse(cfg.AuthDomain): %w", err)
+	}
+	sm.Cookie.Domain = authDomain.Hostname()
+	sm.Cookie.Path = "/"
+	if authDomain.Scheme == "https" {
+		sm.Cookie.SameSite = http.SameSiteStrictMode
+		sm.Cookie.Secure = true
+	} else {
+		sm.Cookie.SameSite = http.SameSiteLaxMode
+		sm.Cookie.Secure = false
+	}
 
 	router := staff.NewRouter(sm, allowList, sendMail, form, logger)
 

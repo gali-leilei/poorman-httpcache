@@ -69,7 +69,7 @@ func NewSendMail(resendAPIKey string, emailDomain string, hostDomain string) (Se
 	}
 
 	sendMail := func(sendTo string, onetimeToken string) (string, error) {
-		magicLink := fmt.Sprintf("%s/auth?onetime_token=%s", hostDomain, onetimeToken)
+		magicLink := fmt.Sprintf("%s/auth/verify?onetime_token=%s", hostDomain, onetimeToken)
 		emailData := EmailData{
 			MagicLink:   magicLink,
 			EmailDomain: emailDomain,
