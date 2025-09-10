@@ -30,7 +30,7 @@ func NewRouter(sm *scs.SessionManager, allowList AllowlistFunc, sendMail SendMai
 	router.Route("/dashboard", func(r chi.Router) {
 		r.Use(sm.LoadAndSave)
 		r.Use(AuthorizeMiddleware(sm, logger))
-		r.Handle("/*", DashboardHandler())
+		r.Handle("/*", DashboardHandler(sm))
 	})
 
 	return router
