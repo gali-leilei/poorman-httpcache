@@ -43,6 +43,7 @@ type Config struct {
 	// resend
 	ResendAPIKey string `env:"RESEND_API_KEY"`
 	EmailDomain  string `env:"EMAIL_DOMAIN"`
+	AuthDomain   string `env:"AUTH_DOMAIN"`
 }
 
 // GetConfig parses the environment variables and hydrates the Config struct.
@@ -102,7 +103,6 @@ func GetConfig() (Config, error) {
 	if err := testConfig(cfg); err != nil {
 		return cfg, fmt.Errorf("testConfig: %w", err)
 	}
-
 	return cfg, nil
 }
 
