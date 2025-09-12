@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(sm *scs.SessionManager, allowList AllowlistFunc, sendMail SendMailFunc, form *Form, logger *slog.Logger) http.Handler {
+func NewRouter(sm *scs.SessionManager, allowList AllowlistFunc, idToKey IDToKeyFunc, sendMail SendMailFunc, sendInstruction SendInstructionFunc, form *Form, logger *slog.Logger) http.Handler {
 	router := chi.NewRouter()
 
 	router.Use(middleware.RequestID)
@@ -32,6 +32,6 @@ func NewRouter(sm *scs.SessionManager, allowList AllowlistFunc, sendMail SendMai
 		r.Use(AuthorizeMiddleware(sm, logger))
 		r.Handle("/*", DashboardHandler(sm))
 	})
-
+	router.Handle("/request", SendInstructionHandler(form, allowList, idToKey, sendInstruction, logger))
 	return router
 }

@@ -1,0 +1,34 @@
+package components
+
+type AsideItem struct {
+	Value string
+	Link string
+}
+
+type AsideProps struct {
+    Items []AsideItem
+	SelectedValue string
+    Name string
+}
+
+templ Aside(props AsideProps) {
+    <aside
+        id={ "aside-" + props.Name }
+        name={ props.Name }
+        class="aside"
+    >
+        <ul class="aside-links">
+            for _, item := range props.Items {
+                <li>
+                    <a href={ item.Link }
+                        if item.Value == props.SelectedValue {
+                            selected
+                        }
+                    >
+                        { item.Value }
+                    </a>
+                </li>
+            }
+        </ul>
+    </aside>
+}

@@ -44,6 +44,16 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 		return fmt.Errorf("staff.NewAllowlist(): %w", err)
 	}
 
+	idToKey, err := staff.NewIDToKey(db)
+	if err != nil {
+		return fmt.Errorf("staff.NewIDToKey(): %w", err)
+	}
+
+	sendInstruction, err := staff.NewSendInstruction(cfg.ResendAPIKey, cfg.EmailDomain, cfg.ServiceDomain)
+	if err != nil {
+		return fmt.Errorf("staff.NewSendInstruction(): %w", err)
+	}
+
 	sendMail, err := staff.NewSendMail(cfg.ResendAPIKey, cfg.EmailDomain, cfg.AuthDomain)
 	if err != nil {
 		return fmt.Errorf("staff.NewSendMail(): %w", err)
@@ -77,7 +87,7 @@ func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
 		sm.Cookie.Secure = false
 	}
 
-	router := staff.NewRouter(sm, allowList, sendMail, form, logger)
+	router := staff.NewRouter(sm, allowList, idToKey, sendMail, sendInstruction, form, logger)
 
 	// rate limter
 	rateLimter := httprate.Limit(
