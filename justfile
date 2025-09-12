@@ -12,6 +12,7 @@ default:
 codegen:
 	go generate {{justfile_directory()}}/pkg/api
 	go generate {{justfile_directory()}}/pkg/dbsqlc
+	go generate {{justfile_directory()}}/pkg/templa
 
 # build the named services
 [group('build')]
