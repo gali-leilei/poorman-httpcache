@@ -40,12 +40,12 @@ const instructionHTML = `
 
 <h4>Jina AI</h4>
 <pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
-curl --location "https://{{.ServiceDomain}}/jina/https://www.example.com" \
+curl --location "{{.ServiceDomain}}/jina/https://www.example.com" \
   --header "Authorization: Bearer {{.APIKey}}"</pre>
 
 <h4>Serper</h4>
 <pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
-curl --location "https://{{.ServiceDomain}}/serper/search" \
+curl --location "{{.ServiceDomain}}/serper/search" \
   --header "X-API-KEY: {{.APIKey}}" \
   --header "Content-Type: application/json" \
   --data '{"q": "your search query"}'</pre>
@@ -57,7 +57,7 @@ curl --location "https://{{.ServiceDomain}}/serper/search" \
 <pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
 import requests
 
-url = "https://{{.ServiceDomain}}/jina/https://www.example.com"
+url = "{{.ServiceDomain}}/jina/https://www.example.com"
 headers = {
     "Authorization": "Bearer {{.APIKey}}"
 }
@@ -71,7 +71,7 @@ print(response.json())
 import requests
 import json
 
-url = "https://{{.ServiceDomain}}/serper/search"
+url = "{{.ServiceDomain}}/serper/search"
 headers = {
     "X-API-KEY": "{{.APIKey}}",
     "Content-Type": "application/json"
@@ -88,16 +88,16 @@ print(response.json())
 <p> Coming soon (PR awaiting test and review). Update project .env file or config.yaml file: </p>
 <pre style="background-color: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d1d9e0; overflow-x: auto; font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 85%;">
 // in .env file
-JINA_BASE_URL=https://cachev1.{{.EmailDomain}}/jina/
+JINA_BASE_URL={{.ServiceDomain}}/jina/
 JINA_API_KEY={{.APIKey}}
-SERPER_BASE_URL=https://cachev1.{{.EmailDomain}}/serper/
+SERPER_BASE_URL={{.ServiceDomain}}/serper/
 SERPER_API_KEY={{.APIKey}}
 
 // in config.yaml file
 env:
-	JINA_BASE_URL: https://cachev1.{{.EmailDomain}}/jina/
+	JINA_BASE_URL: {{.ServiceDomain}}/jina/
 	JINA_API_KEY: {{.APIKey}}
-	SERPER_BASE_URL: https://cachev1.{{.EmailDomain}}/serper/
+	SERPER_BASE_URL: {{.ServiceDomain}}/serper/
 	SERPER_API_KEY: {{.APIKey}}
 </pre>
 
@@ -114,7 +114,6 @@ type EmailData struct {
 type InstructionData struct {
 	APIKey        string
 	ServiceDomain string
-	EmailDomain   string
 }
 
 // SendMailFunc is the function to send the email
@@ -232,7 +231,6 @@ func NewSendInstruction(resendAPIKey string, emailDomain string, serviceDomain s
 		instructionData := InstructionData{
 			APIKey:        apiKey,
 			ServiceDomain: serviceDomain,
-			EmailDomain:   emailDomain,
 		}
 
 		var instructionBodyBuffer bytes.Buffer
