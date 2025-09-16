@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"httpcache/pkg"
+	"httpcache/pkg/cache"
 	"httpcache/pkg/dbsqlc"
 	"httpcache/pkg/proxy"
 	"httpcache/pkg/tollgate"
@@ -65,6 +66,24 @@ func NewNameServer(cfg pkg.Config, logger *slog.Logger) *pkg.NameServer {
 	return ns
 }
 
+func NewCache(cfg pkg.Config, logger *slog.Logger) (*cache.Cache, error) {
+	cache, err := cache.New(
+		cache.WithAdapter(cache.NewRedisAdapter(&redis.RingOptions{
+			Addrs:    map[string]string{"server0": fmt.Sprintf("%s:%d", cfg.RedisHost, cfg.RedisPort)},
+			Username: cfg.RedisUsername,
+			Password: cfg.RedisPassword,
+		}, logger)),
+		cache.WithMethods([]string{http.MethodGet, http.MethodPost}),
+		cache.WithTTL(24*time.Hour),
+		cache.WithLogger(logger),
+	)
+	if err != nil {
+		logger.Error("Failed to create cache", "error", err)
+		return nil, err
+	}
+	return cache, nil
+}
+
 func NewJinaProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 	target, err := url.Parse("https://r.jina.ai")
 	if err != nil {
@@ -96,8 +115,12 @@ func NewJinaProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 		return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
 	tollgate := tollgate.New(rdsAdapter, secretKeyExtract, logger)
+	cache, err := NewCache(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("NewCache: %w", err)
+	}
 
-	return tollgate.HTTPHandlerMiddleware(rp), nil
+	return tollgate.HTTPHandlerMiddleware(cache.HTTPHandlerMiddleware(rp)), nil
 }
 
 func NewSerperProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
@@ -130,8 +153,12 @@ func NewSerperProxy(cfg pkg.Config, logger *slog.Logger) (http.Handler, error) {
 		return r.Header.Get("X-API-KEY")
 	}
 	tollgate := tollgate.New(rdsAdapter, secretKeyExtract, logger)
+	cache, err := NewCache(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("NewCache: %w", err)
+	}
 
-	return tollgate.HTTPHandlerMiddleware(rp), nil
+	return tollgate.HTTPHandlerMiddleware(cache.HTTPHandlerMiddleware(rp)), nil
 }
 
 func run(ctx context.Context, cfg pkg.Config, logger *slog.Logger) error {
