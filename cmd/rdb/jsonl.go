@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"httpcache/pkg/cache"
+	"net/http"
 	"os"
 
 	"github.com/bytedance/sonic"
@@ -17,6 +18,11 @@ import (
 )
 
 var jsonEncoder = sonic.ConfigDefault
+
+type Response struct {
+	Value  string
+	Header http.Header
+}
 
 // redisObjectChan reads rdb file and returns a channel of RedisObject
 func redisObjectStream(rdbFileName string) <-chan model.RedisObject {
@@ -101,64 +107,78 @@ func transformStream(redisObjectChan <-chan model.StringObject) <-chan cache.Res
 	return responseChan
 }
 
-func decodeStream(responseChan <-chan cache.Response) <-chan cache.Response {
-	decodedChan := make(chan cache.Response, 1000)
+func decodeStream(responseChan <-chan cache.Response) <-chan Response {
+	decodedChan := make(chan Response, 1000)
 	go func() {
 		defer close(decodedChan)
 		itemCount := 0
+		wrongCount := 0
+		notGzipCount := 0
+
+		// Count per encoding and content type
+		encodingCounts := make(map[string]int)
+		contentTypeCounts := make(map[string]int)
+
 		for response := range responseChan {
 			encoding := response.Header.Get("Content-Encoding")
+			contentType := response.Header.Get("Content-Type")
 
+			// Track counts for each encoding and content type
+			if encoding == "" {
+				encoding = "(none)"
+			}
+			if contentType == "" {
+				contentType = "(none)"
+			}
+			encodingCounts[encoding]++
+			contentTypeCounts[contentType]++
+
+			decodedResponse := Response{
+				Header: response.Header,
+				Value:  string(response.Value),
+			}
 			// If content is gzip encoded, decode it
-			if encoding == "gzip" {
-				// Check if data actually looks like gzip (starts with magic number 0x1f, 0x8b)
-				if len(response.Value) < 2 || response.Value[0] != 0x1f || response.Value[1] != 0x8b {
-					fmt.Fprintf(os.Stderr, "Content-Encoding is gzip but data doesn't have gzip magic header (len=%d, first bytes: %x)\n",
-						len(response.Value), response.Value[:min(len(response.Value), 10)])
-					// Send original response since it's not actually gzip
-					continue
-				}
-
-				gzipReader, err := gzip.NewReader(bytes.NewReader(response.Value))
+			if encoding == "gzip" && contentType == "text/plain" {
+				decodedValue, err := decodeGzip(response.Value)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to create gzip reader: %v (data len=%d, first bytes: %x)\n",
-						err, len(response.Value), response.Value[:min(len(response.Value), 10)])
-					// Send original response on error
+					// fmt.Fprintf(os.Stderr, "decodeBase64Gzip(response.Value), %v\n", err)
+					wrongCount++
 					continue
+				} else {
+					itemCount++
 				}
-
-				var decodedContent bytes.Buffer
-				_, err = decodedContent.ReadFrom(gzipReader)
-				gzipReader.Close()
-
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to decompress gzip content: %v\n", err)
-					// Send original response on error
-					continue
-				}
-
-				// Update response with decoded content
-				response.Value = decodedContent.Bytes()
-
-				// Remove Content-Encoding header since content is no longer compressed
 				response.Header.Del("Content-Encoding")
-
-				// Update Content-Length header if it exists
 				if response.Header.Get("Content-Length") != "" {
 					response.Header.Set("Content-Length", fmt.Sprintf("%d", len(response.Value)))
 				}
 
-				itemCount++
+				decodedResponse.Value = string(decodedValue)
+			} else {
+				notGzipCount++
 			}
 
-			decodedChan <- response
+			decodedChan <- decodedResponse
 		}
 		fmt.Fprintf(os.Stderr, "Total items decoded: %d\n", itemCount)
+		fmt.Fprintf(os.Stderr, "Total items wrong decoded: %d\n", wrongCount)
+		fmt.Fprintf(os.Stderr, "Total items not gzip decoded: %d\n", notGzipCount)
+
+		// Print encoding counts
+		fmt.Fprintf(os.Stderr, "\nContent-Encoding distribution:\n")
+		for encoding, count := range encodingCounts {
+			fmt.Fprintf(os.Stderr, "  %s: %d\n", encoding, count)
+		}
+
+		// Print content type counts
+		fmt.Fprintf(os.Stderr, "\nContent-Type distribution:\n")
+		for contentType, count := range contentTypeCounts {
+			fmt.Fprintf(os.Stderr, "  %s: %d\n", contentType, count)
+		}
 	}()
 	return decodedChan
 }
 
-func writeResponse(jsonFileName string, responseChan <-chan cache.Response) error {
+func writeResponse(jsonFileName string, responseChan <-chan Response) error {
 	jsonFile, err := os.Create(jsonFileName)
 	if err != nil {
 		return fmt.Errorf("create json %s failed, %v", jsonFileName, err)
@@ -194,6 +214,25 @@ func writeResponse(jsonFileName string, responseChan <-chan cache.Response) erro
 	return nil
 }
 
+// decodeBase64Gzip decodes a base64-encoded gzipped string
+// equivalent to: base64 -d -i value.txt | gunzip
+func decodeGzip(gzippedData []byte) ([]byte, error) {
+	// Step 2: Gzip decompress
+	reader, err := gzip.NewReader(bytes.NewReader(gzippedData))
+	if err != nil {
+		return nil, fmt.Errorf("gzip reader creation failed: %v", err)
+	}
+	defer reader.Close()
+
+	var decompressed bytes.Buffer
+	_, err = decompressed.ReadFrom(reader)
+	if err != nil {
+		return nil, fmt.Errorf("gzip decompression failed: %v", err)
+	}
+
+	return decompressed.Bytes(), nil
+}
+
 // ToJSONLine reads rdb file and converts to json file
 func ToJSONLine(rdbFilename string, jsonFilename string, encoding string) error {
 	if rdbFilename == "" {
@@ -209,9 +248,9 @@ func ToJSONLine(rdbFilename string, jsonFilename string, encoding string) error 
 	redisObjectChan := redisObjectStream(rdbFilename)
 	filteredObjectChan := filterStream(redisObjectChan)
 	responseChan := transformStream(filteredObjectChan)
-	// decodedChan := decodeStream(responseChan)
-	// err := writeResponse(jsonFilename, decodedChan)
-	err := writeResponse(jsonFilename, responseChan)
+	decodedChan := decodeStream(responseChan)
+	err := writeResponse(jsonFilename, decodedChan)
+	// err := writeResponse(jsonFilename, responseChan)
 	if err != nil {
 		return fmt.Errorf("write response failed, %v", err)
 	}
