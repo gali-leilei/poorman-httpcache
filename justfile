@@ -1,7 +1,8 @@
 set dotenv-load := true
 set dotenv-path := "{{justfile_directory()}}/.env"
-path_to_migrations := "{{justfile_directory()}}/pkg/dbmigrate"
-database_url := "{{env.POSTGRES_URL}}"
+
+path_to_migrations := join("{{justfile_directory()}}", "pkg", "dbmigrate")
+database_url := env("POSTGRES_URL", "")
 
 # default recipe to show all recipes
 default:
@@ -10,7 +11,7 @@ default:
 # generate code with sqlc and oapi-codegen
 [group('build')]
 codegen:
-	go generate {{justfile_directory()}}/pkg/api
+	go generate {{justfile_directory()}}/pkg/admin/api
 	go generate {{justfile_directory()}}/pkg/dbsqlc
 	go generate {{justfile_directory()}}/pkg/templa
 
