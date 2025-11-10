@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"httpcache/pkg"
-	"httpcache/pkg/api"
+	"httpcache/pkg/admin/api"
 	"log/slog"
 	"net/http"
 	"os"
